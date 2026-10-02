@@ -1,0 +1,419 @@
+{
+  "schemaVersion": 1,
+  "version": "v0.1.0",
+  "bundle": {
+    "filename": "WoWBox-v0.1.0-runtime-assets.tar.gz",
+    "url": "https://github.com/FrontMage/WoWBox/releases/download/v0.1.0/WoWBox-v0.1.0-runtime-assets.tar.gz",
+    "sha256": "f22618a7e425ac60e3f27d8423787268f20527fee48539d46b3e00ca22ad7600"
+  },
+  "files": [
+    {
+      "path": "app/src/main/assets/box_spec.json",
+      "sha256": "bb8cd604552bd3bcc7f2bafc84daf7f488ab3f5ab47848d1a1150d360947074c",
+      "sizeBytes": 9633,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/common_dlls.json",
+      "sha256": "0b09a3b4bdb5e828a5355678d6cc54e3a6271c0f9d9ab25163d5575048c878d6",
+      "sizeBytes": 20077,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/container_pattern_common.tzst",
+      "sha256": "ec14519716bee821c1f1f3ae97c5d97f7e69603aa04d0be834e1f708102b96b9",
+      "sizeBytes": 10769282,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/dxwrapper/d8vk-1.0.tzst",
+      "sha256": "5e18deb3deedc937dad9974013c2039f8110f9baf6a520c4310ec888d8a59511",
+      "sizeBytes": 1128672,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/dxwrapper/dxvk-2.3.1.tzst",
+      "sha256": "75678d86f3b150efc765e564df8a1f00036b6c64e5726145216778aec6a1be75",
+      "sizeBytes": 3899869,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/dxwrapper/dxvk-2.7.1-arm64ec-83e503b4-a641.tzst",
+      "sha256": "9c082e8d186973bde4ae3a99805a11ef26b78d1d3f3013fae7ae0409f4e8d9a6",
+      "sizeBytes": 13257829,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/dxwrapper/dxvk-2.7.1-official-amd64.tzst",
+      "sha256": "b3400aff6cdeb8244c8926b9a287659492b86f7f9e3873b1017cdd1b10c92e88",
+      "sizeBytes": 9089513,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/dxwrapper/dxvk-2.7.1-vkd3d-3.1.0-wowclassic-f1d78e4d-amd64.tzst",
+      "sha256": "3c527d5e357aa798a89e739f275bdade5485ac149133edb03357b89d853852ed",
+      "sizeBytes": 8749421,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/dxwrapper/vkd3d-3.1.0-wowclassic-f1d78e4d-amd64.tzst",
+      "sha256": "5862e875f79896acf2d4264efba656b1e7249dd3486e9efebe52b0b2b607fdd3",
+      "sizeBytes": 4097830,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/fexcore/fexcore-2508-frontmage-bnet-99d69a-native-mock-jemalloc-5f1dbc8d.tzst",
+      "sha256": "5f1dbc8db81adcbcc25e1e4119b8bb16d4abbeb8d37b06a95249764e21edeae3",
+      "sizeBytes": 1588283,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/fexcore_env_vars.json",
+      "sha256": "51dcd250c8bbb748f1c29cdc296553ee8dfa826c6f6a49e4c4436d7c371f3e77",
+      "sizeBytes": 2184,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/frame_generation/lsfg-vk-feb7899-wowbox-route-v3-8c31f59a.tzst",
+      "sha256": "bda4ecddfd5af21f786d51a642ee0196c56879088725feff9407a88e33e865f8",
+      "sizeBytes": 750414,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/gpu_cards.json",
+      "sha256": "1ba1c3a2cefa30a3dcf4216ed57d9356e2504fdbc61130a07cafbd3785dde86e",
+      "sizeBytes": 19642,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/graphics_driver/adrenotools-turnip25.3.6-ir3-armnative-ce8ab1ea.tzst",
+      "sha256": "ce8ab1eacf0dbc88e7ddb0dfcde307cf72de77f8183a297aacf94e2cfa7d5bee",
+      "sizeBytes": 2237870,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/graphics_driver/adrenotools-turnip25.3.6-vanilla-armnative-5080c91b.tzst",
+      "sha256": "5080c91b38e0f9a022e5e515e59d9566ea206157635d95741164fefbcae0e8ab",
+      "sizeBytes": 2238126,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/graphics_driver/adrenotools-turnip26.1.5-frontmage-ir3-nonstrict-ebad131-abc97b08.tzst",
+      "sha256": "abc97b08fb3de2d54655e3493b34ff5a5a4f061878eeca88d657103581803c5a",
+      "sizeBytes": 2147343,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/graphics_driver/graphics-stack-frontmage-bionic-a93355a9.tzst",
+      "sha256": "a93355a91215d9a1a7d56538f2a3aa9258963a425a5eeec1188969b0333c9ef5",
+      "sizeBytes": 35097968,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/graphics_driver/graphics-stack-frontmage-bionic-a93355a9.tzst.sha256",
+      "sha256": "6b505f2df6fb77fdfa82047e4d8986e45625984b6f9b20affd20e9b874c2dab8",
+      "sizeBytes": 148,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/imagefs-wowbox-openfonts-afebea0a.txz",
+      "sha256": "afebea0a3fc6c592b0f2e54c3bd8f40227d7e6b63a0159205591708283bf6a15",
+      "sizeBytes": 182184248,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/imagefs_patches.tzst",
+      "sha256": "f6f39d8ce6bc90b685a07b9910c3d47310bb4f35c148215170dec046c5d72295",
+      "sizeBytes": 1217690,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/input_dlls.tzst",
+      "sha256": "f6790eaa8846a6573af1cce2c6997de63b7d76a949bab79a71170ebff9283fcb",
+      "sizeBytes": 514355,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/icons/0.png",
+      "sha256": "9c8aca55ecfa0a49b1a9c807c444acdd107bfb8aea1f784494b42ff839488fd2",
+      "sizeBytes": 1210,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/icons/1.png",
+      "sha256": "94a569a5f6f3dfb7b29bf0ff5ec6eaeabc437df0dab65715e5882278cbbf03b7",
+      "sizeBytes": 367,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/icons/10.png",
+      "sha256": "3405ff392c16ff3d31d295410d7d034306485f9cf5ab31713db3dc865cecc860",
+      "sizeBytes": 558,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/icons/11.png",
+      "sha256": "503a4bd33b5ecb9d8ab71d626519437974d83ccd993c1406989a4c5f5bde70c6",
+      "sizeBytes": 755,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/icons/12.png",
+      "sha256": "14ea4d74b1a0dd7584d9aa0ba173e9e9df4e0f9547fba3b1768594744def85f9",
+      "sizeBytes": 879,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/icons/13.png",
+      "sha256": "6ced208c92ecf95809a95d8630f36b157a8fe96d8b1f8ea838936cf0b80a158a",
+      "sizeBytes": 874,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/icons/14.png",
+      "sha256": "7358e303bbddcfc54ba78de06a82cee2eaa212973a15dfcabcd732b3b1cf8b59",
+      "sizeBytes": 785,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/icons/15.png",
+      "sha256": "830838b157f65420610c90c013c1d6d31856da5c51730ed8178cc08903ee0097",
+      "sizeBytes": 295,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/icons/16.png",
+      "sha256": "94a0ed824a5178139f53df660d3c3d295541bebff98aa6f2cfb44110c2f800c1",
+      "sizeBytes": 354,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/icons/2.png",
+      "sha256": "f520d24496763f19b84797a7545ea8904496f3ad60146c91ad321676118fd892",
+      "sizeBytes": 465,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/icons/3.png",
+      "sha256": "d0a965615c5537b7d3db51066f5a18127d927590298ebfedaffa7d6a9f03c012",
+      "sizeBytes": 418,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/icons/4.png",
+      "sha256": "c8f86f2a3989f020a3098cb7dc22cfc54a2879af47fd81719e5bfe5a96d57792",
+      "sizeBytes": 396,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/icons/5.png",
+      "sha256": "2f88741c6b661cdc4b0341ae5dc0cd0b025b357eb5703593a592542ec7b71e2b",
+      "sizeBytes": 411,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/icons/6.png",
+      "sha256": "6767af56257d491e616f9ae3aa3f16338192158b6769916983c4c7325c4f093c",
+      "sizeBytes": 1004,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/icons/7.png",
+      "sha256": "1d748635ff481779aeebba373d188166b874c3888aab2495228f691a6b3fdcd0",
+      "sizeBytes": 961,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/icons/8.png",
+      "sha256": "02aeb7fae7228282a517acb8c7de8945cb20e88cfd5a5a7b959b0c3a5c7e8aa2",
+      "sizeBytes": 639,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/icons/9.png",
+      "sha256": "c40e586c416b9e96f8d476ac369f10353a4de7d8f4d3228cdbc35819012c49a9",
+      "sizeBytes": 761,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/profiles/controls-1.icp",
+      "sha256": "6fa06bf68a71a2ed2c3e5dc14486303f740434ec4779b69e036b2cc9bb78f822",
+      "sizeBytes": 2979,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/profiles/controls-2.icp",
+      "sha256": "392f969b4c5ae0af01e7ebbe2c3a4388910b1fc10ed867e67195fc6192d2934d",
+      "sizeBytes": 2351,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/profiles/controls-3.icp",
+      "sha256": "7b3a64a1dec9e7827a3c85af20aea05a09c5e37a166ede6e548abc9be78dc91e",
+      "sizeBytes": 3060,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/inputcontrols/profiles/controls-4.icp",
+      "sha256": "9428c462d277598c1f23615a00db2872ad2fac56cead0497f0ed41cfa4a2d1ce",
+      "sizeBytes": 1457,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/layers.tzst",
+      "sha256": "9beac20c3e2c7f2c224f2c18cc6dc253b0f70450006fc986970992c7a8814ffa",
+      "sizeBytes": 4447187,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/licenses/DejaVu-LICENSE.txt",
+      "sha256": "7a083b136e64d064794c3419751e5c7dd10d2f64c108fe5ba161eae5e5958a93",
+      "sizeBytes": 8816,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/licenses/FEX-MIT-LICENSE.txt",
+      "sha256": "f34a779f56b36d22b20e1b990d23e583a6a7ca071331925fa46156441c77a1ee",
+      "sizeBytes": 1094,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/licenses/SourceHanSans-OFL.txt",
+      "sha256": "f55c2d43dd905011515f5e46ba78d180027e314ef8ccaaf53a9e88fe316767cd",
+      "sizeBytes": 4463,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/licenses/Wine-COPYING.LIB.txt",
+      "sha256": "e237fa56668030e928551ddd60f05df5fe957f75eab874bbd017e085ed722e7c",
+      "sizeBytes": 26434,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/licenses/Wine-Fonts-LGPL-2.1.txt",
+      "sha256": "e237fa56668030e928551ddd60f05df5fe957f75eab874bbd017e085ed722e7c",
+      "sizeBytes": 26434,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/licenses/Wine-LICENSE.txt",
+      "sha256": "ae025f125a5d639f0f7abe5146efa1e3d7453cc10b744b2910806fa3f46626ef",
+      "sizeBytes": 824,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/licenses/jsch-LICENSE.txt",
+      "sha256": "4f3da3ed94868de01276d6eff24f240067be70b5b63b64dcc4548e10a49cf739",
+      "sizeBytes": 1646,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/licenses/winlator-MIT-LICENSE.txt",
+      "sha256": "e5259ada2d79d2c2211755c932bbca49995570fd64b29ebd83793b153d652e3a",
+      "sizeBytes": 1064,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/managed_assets.json",
+      "sha256": "02304daedd8126b65471c69f73c8dd4e2463e8e1f36f19f8acf68c9ee66bd39e",
+      "sizeBytes": 10124,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/pulseaudio.tzst",
+      "sha256": "a31d331e1f1ec514d8287b830c1668c1d65a9b34c21010bd918eca43d2f4947f",
+      "sizeBytes": 45548,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/rootfs-utils/aarch64/bin/cat",
+      "sha256": "33b060a650016e94118597563f7fffc2df97c0cad27b6a30bae0e97d9b0a2fe8",
+      "sizeBytes": 572496,
+      "mode": 493
+    },
+    {
+      "path": "app/src/main/assets/rootfs-utils/aarch64/usr/bin/cat",
+      "sha256": "33b060a650016e94118597563f7fffc2df97c0cad27b6a30bae0e97d9b0a2fe8",
+      "sizeBytes": 572496,
+      "mode": 493
+    },
+    {
+      "path": "app/src/main/assets/rootfs-utils/aarch64/usr/bin/env",
+      "sha256": "5fce7256dcfd208aebbf9908b52384f0abc64385a6f0fe746cb4a15647694746",
+      "sizeBytes": 576592,
+      "mode": 493
+    },
+    {
+      "path": "app/src/main/assets/rootfs-utils/aarch64/usr/bin/lscpu",
+      "sha256": "49e21552ba9ba8fb00b662d14012083c89ceaeab2ccdaba2000732d888f10aea",
+      "sizeBytes": 576592,
+      "mode": 493
+    },
+    {
+      "path": "app/src/main/assets/rootfs-utils/aarch64/usr/lib/alsa-lib/libasound_module_pcm_android_aserver.so",
+      "sha256": "a1464775e79160d399c806f2935d8d76159ffa0e9c6a9797320705922580032a",
+      "sizeBytes": 30984,
+      "mode": 493
+    },
+    {
+      "path": "app/src/main/assets/wincomponents/wincomponents.json",
+      "sha256": "f58e1f2130b3fb20bc59e57031ac0cf51d620e3fc9529a8ae20931f771ae3cad",
+      "sizeBytes": 1247,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/wine-prefix-wowbox-openfonts-350c6f28.tzst",
+      "sha256": "350c6f287ef2008e62439a00f67affc0ef650a7ec2c2b7e8d0bea89e47c2f05a",
+      "sizeBytes": 34821337,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/wine-runtime-wowbox-openfonts-9ac94fff.txz",
+      "sha256": "9ac94fff85c5156e0179e1e11508b1cbb569d4f974bca8838df319327c6f291d",
+      "sizeBytes": 258510052,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/wine_debug_channels.json",
+      "sha256": "c29ca750c8ad4557aba5f27d218dfec5f0f14c3befad7a81b59c7cb28f53cebc",
+      "sizeBytes": 4874,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/wine_startmenu.json",
+      "sha256": "ac9e6773eb3911e220f0eaec67083298209b1c3a10ed195304204c2d3613e3d7",
+      "sizeBytes": 2292,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/winhandler/frontmage-wow-launcher.exe",
+      "sha256": "384987b6e0deaacac2fadc9eb3541a3fb864a7cfe19eab56899e93f3d9e1e282",
+      "sizeBytes": 39936,
+      "mode": 493
+    },
+    {
+      "path": "app/src/main/assets/winhandler/ime-contract-probe-amd64.exe",
+      "sha256": "666cffff5cc57607202d37938e622f19c0248cea4816d66741b16654bddadc39",
+      "sizeBytes": 98816,
+      "mode": 493
+    },
+    {
+      "path": "app/src/main/assets/winhandler/ime-contract-probe-arm64.exe",
+      "sha256": "71fc0d52355a75b5869605596df894002e57d52cf66d55158a1704dc9e7503d7",
+      "sizeBytes": 96256,
+      "mode": 493
+    },
+    {
+      "path": "app/src/main/assets/winhandler/winhandler-lite.exe",
+      "sha256": "9b41b1f7e900b5e25e0a820c4138759ce2a37979323cfa87822adb67d667204f",
+      "sizeBytes": 120320,
+      "mode": 493
+    },
+    {
+      "path": "app/src/main/assets/winhandler/winhandler-xinput-wow-filtered-arm64x-437d6859.tzst",
+      "sha256": "437d68591aace9cd599e7e2653abe0333fa7726df1d65d20fc2ffa33a2beff4d",
+      "sizeBytes": 31348,
+      "mode": 420
+    }
+  ]
+}

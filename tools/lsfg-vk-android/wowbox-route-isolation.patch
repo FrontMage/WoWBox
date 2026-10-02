@@ -1,0 +1,2251 @@
+diff --git a/include/hooks.hpp b/include/hooks.hpp
+index e38212c..5b744aa 100644
+--- a/include/hooks.hpp
++++ b/include/hooks.hpp
+@@ -14,6 +14,8 @@ namespace Hooks {
+         VkDevice device;
+         VkPhysicalDevice physicalDevice;
+         std::pair<uint32_t, VkQueue> queue; // graphics family
++        std::string application;
++        std::string engine;
+     };
+
+     /// Map of hooked Vulkan functions.
+diff --git a/include/layer.hpp b/include/layer.hpp
+index 461eea1..b8a0023 100644
+--- a/include/layer.hpp
++++ b/include/layer.hpp
+@@ -8,6 +8,7 @@
+ #endif
+
+ #include <cstdint>
++#include <string>
+
+ namespace Layer {
+     /// Call to the original vkCreateInstance function.
+@@ -45,6 +46,19 @@ namespace Layer {
+         VkDevice device,
+         const char* pName);
+
++    /// Call to the original vkEnumeratePhysicalDevices function and bind the
++    /// returned handles to their owning instance dispatch table.
++    VkResult ovkEnumeratePhysicalDevices(
++        VkInstance instance,
++        uint32_t* pPhysicalDeviceCount,
++        VkPhysicalDevice* pPhysicalDevices);
++    /// Call to the original vkEnumeratePhysicalDeviceGroups function and bind
++    /// all returned physical-device handles to their owning instance.
++    VkResult ovkEnumeratePhysicalDeviceGroups(
++        VkInstance instance,
++        uint32_t* pPhysicalDeviceGroupCount,
++        VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties);
++
+     /// Call to the original vkGetPhysicalDeviceQueueFamilyProperties function.
+     void ovkGetPhysicalDeviceQueueFamilyProperties(
+         VkPhysicalDevice physicalDevice,
+@@ -229,6 +243,10 @@ namespace Layer {
+         VkSemaphore semaphore,
+         VkFence fence,
+         uint32_t* pImageIndex);
++
++    /// Route metadata captured from the VkApplicationInfo that owns a device.
++    std::string applicationName(VkDevice device);
++    std::string engineName(VkDevice device);
+ }
+
+ /// Symbol definition for Vulkan instance layer.
+diff --git a/include/wowbox/application_filter.hpp b/include/wowbox/application_filter.hpp
+index 7a92e7f..c10479a 100644
+--- a/include/wowbox/application_filter.hpp
++++ b/include/wowbox/application_filter.hpp
+@@ -6,7 +6,7 @@
+ #include <string>
+
+ namespace WowBox {
+-    inline std::string normalizeApplicationName(const char* rawName) {
++    inline std::string normalizeName(const char* rawName) {
+         if (!rawName) return {};
+         std::string name(rawName);
+         const size_t separator = name.find_last_of("/\\");
+@@ -16,6 +16,16 @@ namespace WowBox {
+         return name;
+     }
+
++    inline std::string normalizeApplicationName(const char* rawName) {
++        return normalizeName(rawName);
++    }
++
++    inline std::string normalizeEngineName(const char* rawName) {
++        std::string name = normalizeName(rawName);
++        if (name.size() > 64) name.resize(64);
++        return name;
++    }
++
+     inline bool isAllowedApplicationName(const std::string& name) {
+         static constexpr std::array<const char*, 3> allowed{
+             "wow.exe", "wowclassic.exe", "testd3d.exe"
+@@ -23,4 +33,9 @@ namespace WowBox {
+         return std::ranges::any_of(allowed,
+             [&name](const char* candidate) { return name == candidate; });
+     }
++
++    inline bool isAllowedEngineName(const std::string& name) {
++        return name == "dxvk"
++            || name.find("vkd3d") != std::string::npos;
++    }
+ }
+diff --git a/tmp/lsfg-route-upstream.AFC9rG/source/include/wowbox/dispatch_registry.hpp b/include/wowbox/dispatch_registry.hpp
+new file mode 100644
+index 0000000..bbe45a8
+--- /dev/null
++++ b/include/wowbox/dispatch_registry.hpp
+@@ -0,0 +1,93 @@
++#pragma once
++
++#include <vulkan/vk_layer.h>
++#include <vulkan/vulkan_core.h>
++
++#ifdef __ANDROID__
++#include <vulkan/vulkan_android.h>
++#include <android/hardware_buffer.h>
++#endif
++
++#include <cstdint>
++#include <memory>
++#include <string>
++
++namespace WowBox {
++    struct InstanceDispatch {
++        bool enabled{};
++        std::string application;
++        std::string engine;
++        PFN_vkGetInstanceProcAddr getInstanceProcAddr{};
++        PFN_vkDestroyInstance destroyInstance{};
++        PFN_vkCreateDevice createDevice{};
++        PFN_vkEnumeratePhysicalDevices enumeratePhysicalDevices{};
++        PFN_vkEnumeratePhysicalDeviceGroups enumeratePhysicalDeviceGroups{};
++        PFN_vkGetPhysicalDeviceQueueFamilyProperties getQueueFamilyProperties{};
++        PFN_vkGetPhysicalDeviceMemoryProperties getMemoryProperties{};
++        PFN_vkGetPhysicalDeviceProperties getProperties{};
++        PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR getSurfaceCapabilities{};
++    };
++
++    struct DeviceDispatch {
++        bool enabled{};
++        VkInstance instance{};
++        std::string application;
++        std::string engine;
++        PFN_vkGetDeviceProcAddr getDeviceProcAddr{};
++        PFN_vkSetDeviceLoaderData setDeviceLoaderData{};
++        PFN_vkDestroyDevice destroyDevice{};
++        PFN_vkCreateSwapchainKHR createSwapchain{};
++        PFN_vkQueuePresentKHR queuePresent{};
++        PFN_vkDestroySwapchainKHR destroySwapchain{};
++        PFN_vkGetSwapchainImagesKHR getSwapchainImages{};
++        PFN_vkAllocateCommandBuffers allocateCommandBuffers{};
++        PFN_vkFreeCommandBuffers freeCommandBuffers{};
++        PFN_vkBeginCommandBuffer beginCommandBuffer{};
++        PFN_vkEndCommandBuffer endCommandBuffer{};
++        PFN_vkCreateCommandPool createCommandPool{};
++        PFN_vkDestroyCommandPool destroyCommandPool{};
++        PFN_vkCreateImage createImage{};
++        PFN_vkDestroyImage destroyImage{};
++        PFN_vkGetImageMemoryRequirements getImageMemoryRequirements{};
++        PFN_vkBindImageMemory bindImageMemory{};
++        PFN_vkAllocateMemory allocateMemory{};
++        PFN_vkFreeMemory freeMemory{};
++        PFN_vkCreateSemaphore createSemaphore{};
++        PFN_vkDestroySemaphore destroySemaphore{};
++        PFN_vkGetMemoryFdKHR getMemoryFd{};
++        PFN_vkGetSemaphoreFdKHR getSemaphoreFd{};
++#ifdef __ANDROID__
++        PFN_vkGetAndroidHardwareBufferPropertiesANDROID getAhbProperties{};
++#endif
++        PFN_vkGetDeviceQueue getDeviceQueue{};
++        PFN_vkQueueSubmit queueSubmit{};
++        PFN_vkCmdPipelineBarrier cmdPipelineBarrier{};
++        PFN_vkCmdBlitImage cmdBlitImage{};
++        PFN_vkAcquireNextImageKHR acquireNextImage{};
++    };
++
++    void registerInstance(VkInstance instance, const InstanceDispatch& dispatch);
++    std::shared_ptr<const InstanceDispatch> findInstance(VkInstance instance);
++    void removeInstance(VkInstance instance);
++
++    void registerPhysicalDevices(
++        VkInstance instance, uint32_t count, const VkPhysicalDevice* devices);
++    std::shared_ptr<const InstanceDispatch> findPhysicalDevice(VkPhysicalDevice device);
++    VkInstance findPhysicalDeviceInstance(VkPhysicalDevice device);
++
++    void registerDevice(VkDevice device, const DeviceDispatch& dispatch);
++    std::shared_ptr<const DeviceDispatch> findDevice(VkDevice device);
++    void removeDevice(VkDevice device);
++
++    void registerQueue(VkQueue queue, VkDevice device);
++    std::shared_ptr<const DeviceDispatch> findQueue(VkQueue queue);
++
++    void registerSwapchain(VkSwapchainKHR swapchain, VkDevice device);
++    void removeSwapchain(VkSwapchainKHR swapchain);
++    std::shared_ptr<const DeviceDispatch> findSwapchain(VkSwapchainKHR swapchain);
++
++    void registerCommandBuffers(
++        VkDevice device, uint32_t count, const VkCommandBuffer* buffers);
++    void removeCommandBuffers(uint32_t count, const VkCommandBuffer* buffers);
++    std::shared_ptr<const DeviceDispatch> findCommandBuffer(VkCommandBuffer buffer);
++}
+diff --git a/tmp/lsfg-route-upstream.AFC9rG/source/include/wowbox/present_route_selector.hpp b/include/wowbox/present_route_selector.hpp
+new file mode 100644
+index 0000000..eb467fc
+--- /dev/null
++++ b/include/wowbox/present_route_selector.hpp
+@@ -0,0 +1,76 @@
++#pragma once
++
++#include <cstdint>
++#include <unordered_map>
++
++namespace WowBox {
++    class PresentRouteSelector {
++    public:
++        struct Decision {
++            bool selected{};
++            bool newlySelected{};
++        };
++
++        Decision observeSuccess(uintptr_t source, uint64_t nowMs) {
++            if (!source) return {};
++
++            if (owner_ && owner_ != source) {
++                auto ownerIt = candidates_.find(owner_);
++                if (ownerIt == candidates_.end()
++                        || nowMs > ownerIt->second.lastSuccessMs + OWNER_STALE_MS) {
++                    owner_ = 0;
++                }
++            }
++
++            auto& candidate = candidates_[source];
++            if (candidate.lastSuccessMs
++                    && nowMs > candidate.lastSuccessMs + CONTIGUOUS_PRESENT_MS) {
++                candidate.successCount = 0;
++            }
++            candidate.lastSuccessMs = nowMs;
++            if (candidate.successCount < REQUIRED_PRESENTS)
++                candidate.successCount++;
++
++            bool newlySelected{};
++            if (!owner_ && candidate.successCount >= REQUIRED_PRESENTS) {
++                owner_ = source;
++                newlySelected = true;
++            }
++            return {
++                .selected = owner_ == source,
++                .newlySelected = newlySelected
++            };
++        }
++
++        bool isSelected(uintptr_t source) const {
++            return source && owner_ == source;
++        }
++
++        void remove(uintptr_t source) {
++            candidates_.erase(source);
++            if (owner_ == source) owner_ = 0;
++        }
++
++        void reset() {
++            candidates_.clear();
++            owner_ = 0;
++        }
++
++        uintptr_t selectedSource() const {
++            return owner_;
++        }
++
++        static constexpr uint32_t REQUIRED_PRESENTS = 3;
++        static constexpr uint64_t CONTIGUOUS_PRESENT_MS = 1000;
++        static constexpr uint64_t OWNER_STALE_MS = 3000;
++
++    private:
++        struct Candidate {
++            uint32_t successCount{};
++            uint64_t lastSuccessMs{};
++        };
++
++        std::unordered_map<uintptr_t, Candidate> candidates_;
++        uintptr_t owner_{};
++    };
++}
+diff --git a/tmp/lsfg-route-upstream.AFC9rG/source/src/dispatch_registry.cpp b/src/dispatch_registry.cpp
+new file mode 100644
+index 0000000..ba605a8
+--- /dev/null
++++ b/src/dispatch_registry.cpp
+@@ -0,0 +1,157 @@
++#include "wowbox/dispatch_registry.hpp"
++
++#include <mutex>
++#include <unordered_map>
++
++namespace {
++    std::mutex registryMutex;
++    std::unordered_map<VkInstance, std::shared_ptr<WowBox::InstanceDispatch>> instances;
++    std::unordered_map<VkPhysicalDevice, VkInstance> physicalDevices;
++    std::unordered_map<VkDevice, std::shared_ptr<WowBox::DeviceDispatch>> devices;
++    std::unordered_map<VkQueue, VkDevice> queues;
++    std::unordered_map<VkSwapchainKHR, VkDevice> swapchains;
++    std::unordered_map<VkCommandBuffer, VkDevice> commandBuffers;
++}
++
++void WowBox::registerInstance(
++        VkInstance instance, const InstanceDispatch& dispatch) {
++    std::lock_guard<std::mutex> lock(registryMutex);
++    instances[instance] = std::make_shared<InstanceDispatch>(dispatch);
++}
++
++std::shared_ptr<const WowBox::InstanceDispatch>
++WowBox::findInstance(VkInstance instance) {
++    std::lock_guard<std::mutex> lock(registryMutex);
++    auto it = instances.find(instance);
++    return it == instances.end() ? nullptr : it->second;
++}
++
++void WowBox::removeInstance(VkInstance instance) {
++    std::lock_guard<std::mutex> lock(registryMutex);
++    for (auto it = physicalDevices.begin(); it != physicalDevices.end();) {
++        if (it->second == instance)
++            it = physicalDevices.erase(it);
++        else
++            ++it;
++    }
++    instances.erase(instance);
++}
++
++void WowBox::registerPhysicalDevices(
++        VkInstance instance, uint32_t count, const VkPhysicalDevice* values) {
++    if (!values) return;
++    std::lock_guard<std::mutex> lock(registryMutex);
++    for (uint32_t i = 0; i < count; ++i)
++        physicalDevices[values[i]] = instance;
++}
++
++std::shared_ptr<const WowBox::InstanceDispatch>
++WowBox::findPhysicalDevice(VkPhysicalDevice device) {
++    std::lock_guard<std::mutex> lock(registryMutex);
++    auto physicalIt = physicalDevices.find(device);
++    if (physicalIt == physicalDevices.end()) return nullptr;
++    auto instanceIt = instances.find(physicalIt->second);
++    return instanceIt == instances.end() ? nullptr : instanceIt->second;
++}
++
++VkInstance WowBox::findPhysicalDeviceInstance(VkPhysicalDevice device) {
++    std::lock_guard<std::mutex> lock(registryMutex);
++    auto it = physicalDevices.find(device);
++    return it == physicalDevices.end() ? VK_NULL_HANDLE : it->second;
++}
++
++void WowBox::registerDevice(
++        VkDevice device, const DeviceDispatch& dispatch) {
++    std::lock_guard<std::mutex> lock(registryMutex);
++    devices[device] = std::make_shared<DeviceDispatch>(dispatch);
++}
++
++std::shared_ptr<const WowBox::DeviceDispatch>
++WowBox::findDevice(VkDevice device) {
++    std::lock_guard<std::mutex> lock(registryMutex);
++    auto it = devices.find(device);
++    return it == devices.end() ? nullptr : it->second;
++}
++
++void WowBox::removeDevice(VkDevice device) {
++    std::lock_guard<std::mutex> lock(registryMutex);
++    for (auto it = queues.begin(); it != queues.end();) {
++        if (it->second == device)
++            it = queues.erase(it);
++        else
++            ++it;
++    }
++    for (auto it = swapchains.begin(); it != swapchains.end();) {
++        if (it->second == device)
++            it = swapchains.erase(it);
++        else
++            ++it;
++    }
++    for (auto it = commandBuffers.begin(); it != commandBuffers.end();) {
++        if (it->second == device)
++            it = commandBuffers.erase(it);
++        else
++            ++it;
++    }
++    devices.erase(device);
++}
++
++void WowBox::registerQueue(VkQueue queue, VkDevice device) {
++    if (!queue) return;
++    std::lock_guard<std::mutex> lock(registryMutex);
++    queues[queue] = device;
++}
++
++std::shared_ptr<const WowBox::DeviceDispatch>
++WowBox::findQueue(VkQueue queue) {
++    std::lock_guard<std::mutex> lock(registryMutex);
++    auto queueIt = queues.find(queue);
++    if (queueIt == queues.end()) return nullptr;
++    auto deviceIt = devices.find(queueIt->second);
++    return deviceIt == devices.end() ? nullptr : deviceIt->second;
++}
++
++void WowBox::registerSwapchain(VkSwapchainKHR swapchain, VkDevice device) {
++    if (!swapchain) return;
++    std::lock_guard<std::mutex> lock(registryMutex);
++    swapchains[swapchain] = device;
++}
++
++void WowBox::removeSwapchain(VkSwapchainKHR swapchain) {
++    std::lock_guard<std::mutex> lock(registryMutex);
++    swapchains.erase(swapchain);
++}
++
++std::shared_ptr<const WowBox::DeviceDispatch>
++WowBox::findSwapchain(VkSwapchainKHR swapchain) {
++    std::lock_guard<std::mutex> lock(registryMutex);
++    auto swapchainIt = swapchains.find(swapchain);
++    if (swapchainIt == swapchains.end()) return nullptr;
++    auto deviceIt = devices.find(swapchainIt->second);
++    return deviceIt == devices.end() ? nullptr : deviceIt->second;
++}
++
++void WowBox::registerCommandBuffers(
++        VkDevice device, uint32_t count, const VkCommandBuffer* buffers) {
++    if (!buffers) return;
++    std::lock_guard<std::mutex> lock(registryMutex);
++    for (uint32_t i = 0; i < count; ++i)
++        commandBuffers[buffers[i]] = device;
++}
++
++void WowBox::removeCommandBuffers(
++        uint32_t count, const VkCommandBuffer* buffers) {
++    if (!buffers) return;
++    std::lock_guard<std::mutex> lock(registryMutex);
++    for (uint32_t i = 0; i < count; ++i)
++        commandBuffers.erase(buffers[i]);
++}
++
++std::shared_ptr<const WowBox::DeviceDispatch>
++WowBox::findCommandBuffer(VkCommandBuffer buffer) {
++    std::lock_guard<std::mutex> lock(registryMutex);
++    auto bufferIt = commandBuffers.find(buffer);
++    if (bufferIt == commandBuffers.end()) return nullptr;
++    auto deviceIt = devices.find(bufferIt->second);
++    return deviceIt == devices.end() ? nullptr : deviceIt->second;
++}
+diff --git a/src/hooks.cpp b/src/hooks.cpp
+index 614aba5..dbe5c94 100644
+--- a/src/hooks.cpp
++++ b/src/hooks.cpp
+@@ -4,27 +4,27 @@
+ #include "utils/utils.hpp"
+ #include "context.hpp"
+ #include "layer.hpp"
++#include "wowbox/present_route_selector.hpp"
+
+ #include <vulkan/vulkan_core.h>
+
+-#include <unordered_map>
+-#include <filesystem>
+-#include <stdexcept>
+ #include <algorithm>
++#include <chrono>
+ #include <exception>
++#include <filesystem>
+ #include <iostream>
+-#include <cstdint>
+-#include <cstdlib>
++#include <memory>
++#include <mutex>
++#include <optional>
++#include <stdexcept>
+ #include <string>
++#include <unordered_map>
++#include <utility>
+ #include <vector>
+
+ using namespace Hooks;
+
+ namespace {
+-
+-    ///
+-    /// Add extensions to the instance create info.
+-    ///
+     VkResult myvkCreateInstance(
+             const VkInstanceCreateInfo* pCreateInfo,
+             const VkAllocationCallbacks* pAllocator,
+@@ -49,19 +49,50 @@ namespace {
+         return res;
+     }
+
+-    /// Map of devices to related information.
++    std::mutex stateMutex;
+     std::unordered_map<VkDevice, DeviceInfo> deviceToInfo;
+
+-    ///
+-    /// Add extensions to the device create info.
+-    /// (function pointers are not initialized yet)
+-    ///
++    struct SwapchainState {
++        std::mutex mutex;
++        DeviceInfo deviceInfo;
++        VkSwapchainKHR swapchain{};
++        VkExtent2D extent{};
++        std::vector<VkImage> images;
++        VkPresentModeKHR presentMode{VK_PRESENT_MODE_FIFO_KHR};
++        std::optional<LsContext> context;
++        bool disabled{};
++    };
++
++    std::unordered_map<VkSwapchainKHR, std::shared_ptr<SwapchainState>> swapchains;
++    WowBox::PresentRouteSelector routeSelector;
++
++    uint64_t monotonicMs() {
++        return static_cast<uint64_t>(
++            std::chrono::duration_cast<std::chrono::milliseconds>(
++                std::chrono::steady_clock::now().time_since_epoch()).count());
++    }
++
++    void removeSwapchainState(VkSwapchainKHR swapchain) {
++        std::shared_ptr<SwapchainState> removed;
++        {
++            std::lock_guard<std::mutex> lock(stateMutex);
++            auto it = swapchains.find(swapchain);
++            if (it != swapchains.end()) {
++                removed = std::move(it->second);
++                swapchains.erase(it);
++            }
++            routeSelector.remove(reinterpret_cast<uintptr_t>(swapchain));
++        }
++        // Destruct a potentially expensive LSFG context after releasing the
++        // shared route lock.
++        removed.reset();
++    }
++
+     VkResult myvkCreateDevicePre(
+             VkPhysicalDevice physicalDevice,
+             const VkDeviceCreateInfo* pCreateInfo,
+             const VkAllocationCallbacks* pAllocator,
+             VkDevice* pDevice) {
+-        // add extensions
+         auto extensions = Utils::addExtensions(
+             pCreateInfo->ppEnabledExtensionNames,
+             pCreateInfo->enabledExtensionCount,
+@@ -75,7 +106,8 @@ namespace {
+         VkDeviceCreateInfo createInfo = *pCreateInfo;
+         createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+         createInfo.ppEnabledExtensionNames = extensions.data();
+-        auto res = Layer::ovkCreateDevice(physicalDevice, &createInfo, pAllocator, pDevice);
++        auto res = Layer::ovkCreateDevice(
++            physicalDevice, &createInfo, pAllocator, pDevice);
+         if (res == VK_ERROR_EXTENSION_NOT_PRESENT)
+             throw std::runtime_error(
+                 "Required Vulkan device extensions are not present."
+@@ -83,50 +115,59 @@ namespace {
+         return res;
+     }
+
+-    ///
+-    /// Add related device information after the device is created.
+-    ///
+     VkResult myvkCreateDevicePost(
+             VkPhysicalDevice physicalDevice,
+             VkDeviceCreateInfo* pCreateInfo,
+             const VkAllocationCallbacks*,
+             VkDevice* pDevice) {
+-        deviceToInfo.emplace(*pDevice, DeviceInfo {
++        DeviceInfo info{
+             .device = *pDevice,
+             .physicalDevice = physicalDevice,
+-            .queue = Utils::findQueue(*pDevice, physicalDevice, pCreateInfo, VK_QUEUE_GRAPHICS_BIT)
+-        });
++            .queue = Utils::findQueue(
++                *pDevice, physicalDevice, pCreateInfo, VK_QUEUE_GRAPHICS_BIT),
++            .application = Layer::applicationName(*pDevice),
++            .engine = Layer::engineName(*pDevice)
++        };
++        std::lock_guard<std::mutex> lock(stateMutex);
++        deviceToInfo[*pDevice] = std::move(info);
+         return VK_SUCCESS;
+     }
+
+-    /// Erase the device information when the device is destroyed.
+-    void myvkDestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator) noexcept {
+-        deviceToInfo.erase(device);
++    void myvkDestroyDevice(
++            VkDevice device,
++            const VkAllocationCallbacks* pAllocator) noexcept {
++        std::vector<VkSwapchainKHR> ownedSwapchains;
++        {
++            std::lock_guard<std::mutex> lock(stateMutex);
++            for (const auto& [swapchain, state] : swapchains) {
++                if (state->deviceInfo.device == device)
++                    ownedSwapchains.push_back(swapchain);
++            }
++            deviceToInfo.erase(device);
++        }
++        for (VkSwapchainKHR swapchain : ownedSwapchains)
++            removeSwapchainState(swapchain);
+         Layer::ovkDestroyDevice(device, pAllocator);
+     }
+
+-    std::unordered_map<VkSwapchainKHR, LsContext> swapchains;
+-    std::unordered_map<VkSwapchainKHR, VkDevice> swapchainToDeviceTable;
+-    std::unordered_map<VkSwapchainKHR, VkPresentModeKHR> swapchainToPresent;
+-
+-    ///
+-    /// Adjust swapchain creation parameters and create a swapchain context.
+-    ///
+     VkResult myvkCreateSwapchainKHR(
+             VkDevice device,
+             const VkSwapchainCreateInfoKHR* pCreateInfo,
+             const VkAllocationCallbacks* pAllocator,
+             VkSwapchainKHR* pSwapchain) noexcept {
+-        // find device
+-        auto it = deviceToInfo.find(device);
+-        if (it == deviceToInfo.end()) {
+-            Utils::logLimitN("swapMap", 5, "Device not found in map");
+-            return Layer::ovkCreateSwapchainKHR(device, pCreateInfo, pAllocator, pSwapchain);
++        DeviceInfo deviceInfo{};
++        {
++            std::lock_guard<std::mutex> lock(stateMutex);
++            auto it = deviceToInfo.find(device);
++            if (it == deviceToInfo.end()) {
++                Utils::logLimitN("swapMap", 5, "Device not found in map");
++                return Layer::ovkCreateSwapchainKHR(
++                    device, pCreateInfo, pAllocator, pSwapchain);
++            }
++            deviceInfo = it->second;
+         }
+         Utils::resetLimitN("swapMap");
+-        auto& deviceInfo = it->second;
+
+-        // increase amount of images in swapchain
+         VkSwapchainCreateInfoKHR createInfo = *pCreateInfo;
+         const auto maxImages = Utils::getMaxImageCount(
+             deviceInfo.physicalDevice, pCreateInfo->surface);
+@@ -145,183 +186,221 @@ namespace {
+             Utils::resetLimitN("swapCount");
+         }
+
+-        // allow copy operations on swapchain images
+         createInfo.imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+         createInfo.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+-
+-        // enforce present mode
+         createInfo.presentMode = Config::activeConf.e_present;
+
+-        // retire potential old swapchain
+-        if (pCreateInfo->oldSwapchain) {
+-            swapchains.erase(pCreateInfo->oldSwapchain);
+-            swapchainToDeviceTable.erase(pCreateInfo->oldSwapchain);
+-        }
++        if (pCreateInfo->oldSwapchain)
++            removeSwapchainState(pCreateInfo->oldSwapchain);
+
+-        // create swapchain
+-        auto res = Layer::ovkCreateSwapchainKHR(device, &createInfo, pAllocator, pSwapchain);
++        auto res = Layer::ovkCreateSwapchainKHR(
++            device, &createInfo, pAllocator, pSwapchain);
+         if (res != VK_SUCCESS)
+-            return res; // can't be caused by lsfg-vk (yet)
++            return res;
+
+         try {
+-            swapchainToPresent.emplace(*pSwapchain, createInfo.presentMode);
+-
+-            // get all swapchain images
+             uint32_t imageCount{};
+-            res = Layer::ovkGetSwapchainImagesKHR(device, *pSwapchain, &imageCount, nullptr);
++            res = Layer::ovkGetSwapchainImagesKHR(
++                device, *pSwapchain, &imageCount, nullptr);
+             if (res != VK_SUCCESS || imageCount == 0)
+-                throw LSFG::vulkan_error(res, "Failed to get swapchain image count");
++                throw LSFG::vulkan_error(
++                    res, "Failed to get swapchain image count");
+
+-            std::vector<VkImage> swapchainImages(imageCount);
+-            res = Layer::ovkGetSwapchainImagesKHR(device, *pSwapchain,
+-                &imageCount, swapchainImages.data());
++            std::vector<VkImage> images(imageCount);
++            res = Layer::ovkGetSwapchainImagesKHR(
++                device, *pSwapchain, &imageCount, images.data());
+             if (res != VK_SUCCESS)
+-                throw LSFG::vulkan_error(res, "Failed to get swapchain images");
+-
+-            // create swapchain context
+-            swapchainToDeviceTable.emplace(*pSwapchain, device);
+-            swapchains.emplace(*pSwapchain, LsContext(
+-                deviceInfo, *pSwapchain, pCreateInfo->imageExtent,
+-                swapchainImages
+-            ));
+-
+-            std::cerr << "lsfg-vk: Swapchain context " <<
+-                    (createInfo.oldSwapchain ? "recreated" : "created")
+-                << " (using " << imageCount << " images).\n";
++                throw LSFG::vulkan_error(
++                    res, "Failed to get swapchain images");
++
++            auto state = std::make_shared<SwapchainState>();
++            state->deviceInfo = deviceInfo;
++            state->swapchain = *pSwapchain;
++            state->extent = pCreateInfo->imageExtent;
++            state->images = std::move(images);
++            state->presentMode = createInfo.presentMode;
++            {
++                std::lock_guard<std::mutex> lock(stateMutex);
++                swapchains[*pSwapchain] = state;
++            }
+
++            std::cerr << "lsfg-vk: Swapchain candidate registered: application="
++                      << deviceInfo.application
++                      << ", engine=" << deviceInfo.engine
++                      << ", extent=" << state->extent.width << 'x'
++                      << state->extent.height
++                      << ", images=" << imageCount << ".\n";
+             Utils::resetLimitN("swapCtxCreate");
+         } catch (const std::exception& e) {
+             Utils::logLimitN("swapCtxCreate", 5,
+-                "An error occurred while creating the swapchain wrapper:\n"
+-                "- " + std::string(e.what()));
+-            return VK_SUCCESS; // swapchain is still valid
++                "An error occurred while registering the swapchain candidate:\n"
++                "- " + std::string(e.what()) +
++                "\nFrame generation will remain disabled for this swapchain.");
+         }
+         return VK_SUCCESS;
+     }
+
+-    ///
+-    /// Update presentation parameters and present the next frame(s).
+-    ///
+-    VkResult myvkQueuePresentKHR(
+-            VkQueue queue,
+-            const VkPresentInfoKHR* pPresentInfo) noexcept {
+-        // find swapchain device
+-        auto it = swapchainToDeviceTable.find(*pPresentInfo->pSwapchains);
+-        if (it == swapchainToDeviceTable.end()) {
+-            Utils::logLimitN("swapMap", 5,
+-                "Swapchain not found in map");
+-            return Layer::ovkQueuePresentKHR(queue, pPresentInfo);
++    void enforcePresentMode(
++            const VkPresentInfoKHR* presentInfo,
++            VkPresentModeKHR presentMode) {
++        #pragma clang diagnostic push
++        #pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
++        const VkSwapchainPresentModeInfoEXT* modeInfo =
++            reinterpret_cast<const VkSwapchainPresentModeInfoEXT*>(
++                presentInfo->pNext);
++        while (modeInfo) {
++            if (modeInfo->sType
++                    == VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODE_INFO_EXT) {
++                for (size_t i = 0; i < modeInfo->swapchainCount; ++i)
++                    const_cast<VkPresentModeKHR*>(
++                        modeInfo->pPresentModes)[i] = presentMode;
++            }
++            modeInfo = reinterpret_cast<const VkSwapchainPresentModeInfoEXT*>(
++                modeInfo->pNext);
+         }
++        #pragma clang diagnostic pop
++    }
+
+-        // find device info
+-        auto it2 = deviceToInfo.find(it->second);
+-        if (it2 == deviceToInfo.end()) {
+-            Utils::logLimitN("swapMap", 5,
+-                "Device not found in map");
+-            return Layer::ovkQueuePresentKHR(queue, pPresentInfo);
++    VkResult ordinaryPresentAndObserve(
++            VkQueue queue,
++            const VkPresentInfoKHR* presentInfo,
++            const std::shared_ptr<SwapchainState>& state) {
++        VkResult result = Layer::ovkQueuePresentKHR(queue, presentInfo);
++        if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
++            return result;
++
++        WowBox::PresentRouteSelector::Decision decision;
++        {
++            std::lock_guard<std::mutex> lock(stateMutex);
++            decision = routeSelector.observeSuccess(
++                reinterpret_cast<uintptr_t>(state->swapchain),
++                monotonicMs());
+         }
+-        auto& deviceInfo = it2->second;
+-
+-        // find swapchain context
+-        auto it3 = swapchains.find(*pPresentInfo->pSwapchains);
+-        if (it3 == swapchains.end()) {
+-            Utils::logLimitN("swapMap", 5,
+-                "Swapchain context not found in map");
+-            return Layer::ovkQueuePresentKHR(queue, pPresentInfo);
++        if (decision.newlySelected) {
++            std::cerr << "lsfg-vk: Present route selected: application="
++                      << state->deviceInfo.application
++                      << ", engine=" << state->deviceInfo.engine
++                      << ", extent=" << state->extent.width << 'x'
++                      << state->extent.height << ".\n";
+         }
+-        auto& swapchain = it3->second;
++        return result;
++    }
+
+-        // find present mode
+-        auto it4 = swapchainToPresent.find(*pPresentInfo->pSwapchains);
+-        if (it4 == swapchainToPresent.end()) {
+-            Utils::logLimitN("swapMap", 5,
+-                "Swapchain present mode not found in map");
++    VkResult myvkQueuePresentKHR(
++            VkQueue queue,
++            const VkPresentInfoKHR* pPresentInfo) noexcept {
++        if (!pPresentInfo || pPresentInfo->swapchainCount != 1
++                || !pPresentInfo->pSwapchains
++                || !pPresentInfo->pImageIndices) {
+             return Layer::ovkQueuePresentKHR(queue, pPresentInfo);
+         }
+-        auto& present = it4->second;
+
+-        // enforce present mode | NOLINTBEGIN
+-        #pragma clang diagnostic push
+-        #pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
+-        const VkSwapchainPresentModeInfoEXT* presentModeInfo =
+-            reinterpret_cast<const VkSwapchainPresentModeInfoEXT*>(pPresentInfo->pNext);
+-        while (presentModeInfo) {
+-            if (presentModeInfo->sType == VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODE_INFO_EXT) {
+-                for (size_t i = 0; i < presentModeInfo->swapchainCount; i++)
+-                    const_cast<VkPresentModeKHR*>(presentModeInfo->pPresentModes)[i] =
+-                        present;
+-            }
+-            presentModeInfo =
+-                reinterpret_cast<const VkSwapchainPresentModeInfoEXT*>(presentModeInfo->pNext);
++        const VkSwapchainKHR handle = *pPresentInfo->pSwapchains;
++        std::shared_ptr<SwapchainState> state;
++        bool selected{};
++        {
++            std::lock_guard<std::mutex> lock(stateMutex);
++            auto it = swapchains.find(handle);
++            if (it == swapchains.end())
++                return Layer::ovkQueuePresentKHR(queue, pPresentInfo);
++            state = it->second;
++            selected = routeSelector.isSelected(
++                reinterpret_cast<uintptr_t>(handle));
+         }
+-        #pragma clang diagnostic pop
+
+-        // NOLINTEND | present the next frame
+-        VkResult res{}; // might return VK_SUBOPTIMAL_KHR
++        enforcePresentMode(pPresentInfo, state->presentMode);
++
+         try {
+-            // ensure config is valid
+             auto& conf = Config::activeConf;
+-            if (!conf.config_file.empty()
+-                    && (
+-                            !std::filesystem::exists(conf.config_file)
+-                          || conf.timestamp != std::filesystem::last_write_time(conf.config_file)
+-                    )) {
++            if (!conf.config_file.empty() && (
++                    !std::filesystem::exists(conf.config_file)
++                    || conf.timestamp
++                        != std::filesystem::last_write_time(conf.config_file))) {
+                 Layer::ovkQueuePresentKHR(queue, pPresentInfo);
+                 return VK_ERROR_OUT_OF_DATE_KHR;
+             }
+-
+-            // ensure present mode is still valid
+-            if (present != conf.e_present) {
++            if (state->presentMode != conf.e_present) {
+                 Layer::ovkQueuePresentKHR(queue, pPresentInfo);
+                 return VK_ERROR_OUT_OF_DATE_KHR;
+             }
+-
+-            // skip if disabled
+-            if (conf.multiplier <= 1)
++            if (conf.multiplier <= 1 || state->disabled)
+                 return Layer::ovkQueuePresentKHR(queue, pPresentInfo);
++            if (!selected)
++                return ordinaryPresentAndObserve(
++                    queue, pPresentInfo, state);
++
++            std::lock_guard<std::mutex> routeLock(state->mutex);
++            if (!state->context.has_value()) {
++                state->context.emplace(
++                    state->deviceInfo,
++                    state->swapchain,
++                    state->extent,
++                    state->images);
++                std::cerr << "lsfg-vk: Frame-generation context activated: "
++                          << state->deviceInfo.application << '/'
++                          << state->deviceInfo.engine << ".\n";
++            }
+
+-            // present the swapchain
+-            std::vector<VkSemaphore> semaphores(pPresentInfo->waitSemaphoreCount);
+-            std::copy_n(pPresentInfo->pWaitSemaphores, semaphores.size(), semaphores.data());
+-
+-            res = swapchain.present(deviceInfo, pPresentInfo->pNext,
+-                queue, semaphores, *pPresentInfo->pImageIndices);
+-
++            std::vector<VkSemaphore> semaphores(
++                pPresentInfo->waitSemaphoreCount);
++            std::copy_n(
++                pPresentInfo->pWaitSemaphores,
++                semaphores.size(), semaphores.data());
++            VkResult result = state->context->present(
++                state->deviceInfo,
++                pPresentInfo->pNext,
++                queue,
++                semaphores,
++                *pPresentInfo->pImageIndices);
++            if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
++                std::lock_guard<std::mutex> lock(stateMutex);
++                routeSelector.observeSuccess(
++                    reinterpret_cast<uintptr_t>(handle),
++                    monotonicMs());
++            }
+             Utils::resetLimitN("swapPresent");
++            return result;
+         } catch (const std::exception& e) {
+             Utils::logLimitN("swapPresent", 5,
+-                "An error occurred while presenting the swapchain:\n"
+-                "- " + std::string(e.what()) +
++                "An error occurred while activating or presenting the "
++                "selected swapchain:\n- " + std::string(e.what()) +
+                 "\nFrame generation has been disabled for this swapchain.");
+-            swapchains.erase(*pPresentInfo->pSwapchains);
++            {
++                std::lock_guard<std::mutex> routeLock(state->mutex);
++                state->context.reset();
++                state->disabled = true;
++            }
++            {
++                std::lock_guard<std::mutex> lock(stateMutex);
++                routeSelector.remove(
++                    reinterpret_cast<uintptr_t>(handle));
++            }
+             return Layer::ovkQueuePresentKHR(queue, pPresentInfo);
+         }
+-        return res;
+     }
+
+-    /// Erase the swapchain context and mapping when the swapchain is destroyed.
+     void myvkDestroySwapchainKHR(
+             VkDevice device,
+             VkSwapchainKHR swapchain,
+             const VkAllocationCallbacks* pAllocator) noexcept {
+-        swapchains.erase(swapchain);
+-        swapchainToDeviceTable.erase(swapchain);
+-        swapchainToPresent.erase(swapchain);
++        removeSwapchainState(swapchain);
+         Layer::ovkDestroySwapchainKHR(device, swapchain, pAllocator);
+     }
+ }
+
+ std::unordered_map<std::string, PFN_vkVoidFunction> Hooks::hooks = {
+-    // instance hooks
+-    {"vkCreateInstance", reinterpret_cast<PFN_vkVoidFunction>(myvkCreateInstance)},
+-
+-    // device hooks
+-    {"vkCreateDevicePre", reinterpret_cast<PFN_vkVoidFunction>(myvkCreateDevicePre)},
+-    {"vkCreateDevicePost", reinterpret_cast<PFN_vkVoidFunction>(myvkCreateDevicePost)},
+-    {"vkDestroyDevice", reinterpret_cast<PFN_vkVoidFunction>(myvkDestroyDevice)},
+-
+-    // swapchain hooks
+-    {"vkCreateSwapchainKHR", reinterpret_cast<PFN_vkVoidFunction>(myvkCreateSwapchainKHR)},
+-    {"vkQueuePresentKHR", reinterpret_cast<PFN_vkVoidFunction>(myvkQueuePresentKHR)},
+-    {"vkDestroySwapchainKHR", reinterpret_cast<PFN_vkVoidFunction>(myvkDestroySwapchainKHR)}
++    {"vkCreateInstance", reinterpret_cast<PFN_vkVoidFunction>(
++        myvkCreateInstance)},
++    {"vkCreateDevicePre", reinterpret_cast<PFN_vkVoidFunction>(
++        myvkCreateDevicePre)},
++    {"vkCreateDevicePost", reinterpret_cast<PFN_vkVoidFunction>(
++        myvkCreateDevicePost)},
++    {"vkDestroyDevice", reinterpret_cast<PFN_vkVoidFunction>(
++        myvkDestroyDevice)},
++    {"vkCreateSwapchainKHR", reinterpret_cast<PFN_vkVoidFunction>(
++        myvkCreateSwapchainKHR)},
++    {"vkQueuePresentKHR", reinterpret_cast<PFN_vkVoidFunction>(
++        myvkQueuePresentKHR)},
++    {"vkDestroySwapchainKHR", reinterpret_cast<PFN_vkVoidFunction>(
++        myvkDestroySwapchainKHR)}
+ };
+diff --git a/src/layer.cpp b/src/layer.cpp
+index af22447..1da36b8 100644
+--- a/src/layer.cpp
++++ b/src/layer.cpp
+@@ -3,8 +3,8 @@
+ #include "config/config.hpp"
+ #include "extract/extract.hpp"
+ #include "hooks.hpp"
+-#include "utils/utils.hpp"
+ #include "wowbox/application_filter.hpp"
++#include "wowbox/dispatch_registry.hpp"
+
+ #ifdef __ANDROID__
+ #include <android/hardware_buffer.h>
+@@ -14,7 +14,6 @@
+ #include <vulkan/vk_layer.h>
+ #include <vulkan/vulkan_core.h>
+
+-#include <unordered_map>
+ #include <cstdlib>
+ #include <exception>
+ #include <fstream>
+@@ -25,72 +24,38 @@
+ #include <unistd.h>
+
+ namespace {
+-    PFN_vkCreateInstance  next_vkCreateInstance{};
+-    PFN_vkDestroyInstance next_vkDestroyInstance{};
+-
+-    PFN_vkCreateDevice  next_vkCreateDevice{};
+-    PFN_vkDestroyDevice next_vkDestroyDevice{};
+-
+-    PFN_vkSetDeviceLoaderData next_vSetDeviceLoaderData{};
+-
+-    PFN_vkGetInstanceProcAddr next_vkGetInstanceProcAddr{};
+-    PFN_vkGetDeviceProcAddr   next_vkGetDeviceProcAddr{};
+-
+-    PFN_vkGetPhysicalDeviceQueueFamilyProperties next_vkGetPhysicalDeviceQueueFamilyProperties{};
+-    PFN_vkGetPhysicalDeviceMemoryProperties next_vkGetPhysicalDeviceMemoryProperties{};
+-    PFN_vkGetPhysicalDeviceProperties next_vkGetPhysicalDeviceProperties{};
+-    PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR next_vkGetPhysicalDeviceSurfaceCapabilitiesKHR{};
+-
+-    PFN_vkCreateSwapchainKHR  next_vkCreateSwapchainKHR{};
+-    PFN_vkQueuePresentKHR     next_vkQueuePresentKHR{};
+-    PFN_vkDestroySwapchainKHR next_vkDestroySwapchainKHR{};
+-    PFN_vkGetSwapchainImagesKHR  next_vkGetSwapchainImagesKHR{};
+-    PFN_vkAllocateCommandBuffers next_vkAllocateCommandBuffers{};
+-    PFN_vkFreeCommandBuffers     next_vkFreeCommandBuffers{};
+-    PFN_vkBeginCommandBuffer next_vkBeginCommandBuffer{};
+-    PFN_vkEndCommandBuffer   next_vkEndCommandBuffer{};
+-    PFN_vkCreateCommandPool  next_vkCreateCommandPool{};
+-    PFN_vkDestroyCommandPool next_vkDestroyCommandPool{};
+-    PFN_vkCreateImage  next_vkCreateImage{};
+-    PFN_vkDestroyImage next_vkDestroyImage{};
+-    PFN_vkGetImageMemoryRequirements next_vkGetImageMemoryRequirements{};
+-    PFN_vkBindImageMemory next_vkBindImageMemory{};
+-    PFN_vkAllocateMemory  next_vkAllocateMemory{};
+-    PFN_vkFreeMemory next_vkFreeMemory{};
+-    PFN_vkCreateSemaphore  next_vkCreateSemaphore{};
+-    PFN_vkDestroySemaphore next_vkDestroySemaphore{};
+-    PFN_vkGetMemoryFdKHR next_vkGetMemoryFdKHR{};
+-    PFN_vkGetSemaphoreFdKHR next_vkGetSemaphoreFdKHR{};
+-#ifdef __ANDROID__
+-    PFN_vkGetAndroidHardwareBufferPropertiesANDROID next_vkGetAndroidHardwareBufferPropertiesANDROID{};
+-#endif
+-    PFN_vkGetDeviceQueue next_vkGetDeviceQueue{};
+-    PFN_vkQueueSubmit next_vkQueueSubmit{};
+-    PFN_vkCmdPipelineBarrier next_vkCmdPipelineBarrier{};
+-    PFN_vkCmdBlitImage next_vkCmdBlitImage{};
+-    PFN_vkAcquireNextImageKHR next_vkAcquireNextImageKHR{};
++    thread_local PFN_vkCreateInstance pendingCreateInstance{};
++    thread_local PFN_vkCreateDevice pendingCreateDevice{};
+
+     template<typename T>
+-    bool initInstanceFunc(VkInstance instance, const char* name, T* func) {
+-        *func = reinterpret_cast<T>(next_vkGetInstanceProcAddr(instance, name));
+-        if (!*func) {
++    bool loadInstanceFunc(
++            PFN_vkGetInstanceProcAddr getProcAddr,
++            VkInstance instance, const char* name, T* func,
++            bool required = true) {
++        *func = getProcAddr
++            ? reinterpret_cast<T>(getProcAddr(instance, name))
++            : nullptr;
++        if (!*func && required)
+             std::cerr << "(no function pointer for " << name << ")\n";
+-            return false;
+-        }
+-        return true;
++        return *func || !required;
+     }
+
+     template<typename T>
+-    bool initDeviceFunc(VkDevice device, const char* name, T* func) {
+-        *func = reinterpret_cast<T>(next_vkGetDeviceProcAddr(device, name));
+-        if (!*func) {
++    bool loadDeviceFunc(
++            PFN_vkGetDeviceProcAddr getProcAddr,
++            VkDevice device, const char* name, T* func,
++            bool required = true) {
++        *func = getProcAddr
++            ? reinterpret_cast<T>(getProcAddr(device, name))
++            : nullptr;
++        if (!*func && required)
+             std::cerr << "(no function pointer for " << name << ")\n";
+-            return false;
+-        }
+-        return true;
++        return *func || !required;
+     }
+
+-    bool initializeAllowedApplication(const std::string& application) noexcept {
++    bool initializeAllowedApplication(
++            const std::string& application,
++            const std::string& engine) noexcept {
+         static std::mutex mutex;
+         static bool attempted{};
+         static bool ready{};
+@@ -99,17 +64,15 @@ namespace {
+         attempted = true;
+
+         try {
+-            // Only the explicitly allowed Windows application may override
+-            // Mesa's present mode or read Lossless.dll.
++            // Only an explicitly allowed Windows application and D3D Vulkan
++            // engine may override Mesa's present mode or read Lossless.dll.
+             unsetenv("MESA_VK_WSI_PRESENT_MODE"); // NOLINT
+             Extract::extractShaders();
+             ready = true;
+-            std::cerr << "lsfg-vk: WoW Box application matched: "
+-                      << application << '\n';
++            std::cerr << "lsfg-vk: WoW Box route armed: application="
++                      << application << ", engine=" << engine << '\n';
+             std::cerr << "lsfg-vk: Shaders extracted successfully.\n";
+
+-            // Diagnostic metadata is best effort and must never terminate the
+-            // game when TMPDIR is unavailable or read-only.
+             const char* tmpdir = getenv("TMPDIR");
+             const std::string latestPath = tmpdir
+                 ? std::string(tmpdir) + "/lsfg-vk_last"
+@@ -117,6 +80,7 @@ namespace {
+             std::ofstream latest(latestPath, std::ios::trunc);
+             if (latest.is_open()) {
+                 latest << "application: " << application << '\n';
++                latest << "engine: " << engine << '\n';
+                 latest << "pid: " << getpid() << '\n';
+             }
+         } catch (const std::exception& e) {
+@@ -127,290 +91,415 @@ namespace {
+         }
+         return ready;
+     }
+-}
+
+-namespace {
++    VkResult callCreateInstanceHook(
++            const VkInstanceCreateInfo* createInfo,
++            const VkAllocationCallbacks* allocator,
++            VkInstance* instance,
++            PFN_vkCreateInstance nextCreate) {
++        pendingCreateInstance = nextCreate;
++        auto* hook = reinterpret_cast<PFN_vkCreateInstance>(
++            Hooks::hooks.at("vkCreateInstance"));
++        VkResult result = hook(createInfo, allocator, instance);
++        pendingCreateInstance = nullptr;
++        return result;
++    }
++
++    VkResult callCreateDeviceHook(
++            VkPhysicalDevice physicalDevice,
++            const VkDeviceCreateInfo* createInfo,
++            const VkAllocationCallbacks* allocator,
++            VkDevice* device,
++            PFN_vkCreateDevice nextCreate) {
++        pendingCreateDevice = nextCreate;
++        auto* hook = reinterpret_cast<PFN_vkCreateDevice>(
++            Hooks::hooks.at("vkCreateDevicePre"));
++        VkResult result = hook(physicalDevice, createInfo, allocator, device);
++        pendingCreateDevice = nullptr;
++        return result;
++    }
++
+     VkResult layer_vkCreateInstance(
+             const VkInstanceCreateInfo* pCreateInfo,
+             const VkAllocationCallbacks* pAllocator,
+             VkInstance* pInstance) {
+-        try {
+-            // prepare layer | NOLINTBEGIN
+-            auto* layerDesc = const_cast<VkLayerInstanceCreateInfo*>(
+-                reinterpret_cast<const VkLayerInstanceCreateInfo*>(pCreateInfo->pNext));
+-            while (layerDesc && (layerDesc->sType != VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO
+-                    || layerDesc->function != VK_LAYER_LINK_INFO)) {
+-                layerDesc = const_cast<VkLayerInstanceCreateInfo*>(
+-                    reinterpret_cast<const VkLayerInstanceCreateInfo*>(layerDesc->pNext));
+-            }
+-            if (!layerDesc)
+-                throw LSFG::vulkan_error(VK_ERROR_INITIALIZATION_FAILED,
+-                    "No layer creation info found in pNext chain");
+-
+-            next_vkGetInstanceProcAddr = layerDesc->u.pLayerInfo->pfnNextGetInstanceProcAddr;
+-            layerDesc->u.pLayerInfo = layerDesc->u.pLayerInfo->pNext;
+-
+-            bool success = initInstanceFunc(nullptr, "vkCreateInstance", &next_vkCreateInstance);
+-            if (!success)
+-                throw LSFG::vulkan_error(VK_ERROR_INITIALIZATION_FAILED,
+-                    "Failed to get instance function pointer for vkCreateInstance");
+-
+-            // NOLINTEND | allow only the named Windows applications.  Wine's
+-            // host process name is shared by Battle.net, CEF, Agent and WoW,
+-            // while DXVK supplies the Windows executable through
+-            // VkApplicationInfo.
+-            if (Config::activeConf.enable) {
+-                const char* rawApplication = pCreateInfo && pCreateInfo->pApplicationInfo
+-                    ? pCreateInfo->pApplicationInfo->pApplicationName
+-                    : nullptr;
+-                const std::string application =
+-                    WowBox::normalizeApplicationName(rawApplication);
+-                if (!WowBox::isAllowedApplicationName(application)) {
+-                    std::cerr << "lsfg-vk: Pass-through Vulkan application: "
+-                              << (application.empty() ? "<unknown>" : application) << '\n';
+-                    Config::activeConf.enable = false;
+-                } else if (!initializeAllowedApplication(application)) {
+-                    Config::activeConf.enable = false;
+-                }
+-            }
++        auto* layerDesc = const_cast<VkLayerInstanceCreateInfo*>(
++            reinterpret_cast<const VkLayerInstanceCreateInfo*>(pCreateInfo->pNext));
++        while (layerDesc && (
++                layerDesc->sType != VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO
++                || layerDesc->function != VK_LAYER_LINK_INFO)) {
++            layerDesc = const_cast<VkLayerInstanceCreateInfo*>(
++                reinterpret_cast<const VkLayerInstanceCreateInfo*>(layerDesc->pNext));
++        }
++        if (!layerDesc) return VK_ERROR_INITIALIZATION_FAILED;
+
+-            // skip initialization if the layer is disabled
+-            if (!Config::activeConf.enable) {
+-                auto res = next_vkCreateInstance(pCreateInfo, pAllocator, pInstance);
+-                if (res == VK_SUCCESS)
+-                    initInstanceFunc(*pInstance, "vkCreateDevice", &next_vkCreateDevice);
+-                return res;
+-            }
++        PFN_vkGetInstanceProcAddr nextGetInstanceProcAddr =
++            layerDesc->u.pLayerInfo->pfnNextGetInstanceProcAddr;
++        layerDesc->u.pLayerInfo = layerDesc->u.pLayerInfo->pNext;
++
++        PFN_vkCreateInstance nextCreateInstance{};
++        if (!loadInstanceFunc(nextGetInstanceProcAddr, VK_NULL_HANDLE,
++                "vkCreateInstance", &nextCreateInstance))
++            return VK_ERROR_INITIALIZATION_FAILED;
+
+-            // create instance
+-            VkResult instanceResult{};
++        const VkApplicationInfo* appInfo =
++            pCreateInfo ? pCreateInfo->pApplicationInfo : nullptr;
++        const std::string application = WowBox::normalizeApplicationName(
++            appInfo ? appInfo->pApplicationName : nullptr);
++        const std::string engine = WowBox::normalizeEngineName(
++            appInfo ? appInfo->pEngineName : nullptr);
++
++        bool enabled = Config::activeConf.enable
++            && WowBox::isAllowedApplicationName(application)
++            && WowBox::isAllowedEngineName(engine);
++        if (Config::activeConf.enable && !enabled) {
++            std::cerr << "lsfg-vk: Pass-through Vulkan route: application="
++                      << (application.empty() ? "<unknown>" : application)
++                      << ", engine=" << (engine.empty() ? "<unknown>" : engine)
++                      << '\n';
++        }
++        if (enabled)
++            enabled = initializeAllowedApplication(application, engine);
++
++        VkResult result{};
++        if (enabled) {
+             try {
+-                auto* createInstanceHook = reinterpret_cast<PFN_vkCreateInstance>(
+-                    Hooks::hooks["vkCreateInstance"]);
+-                instanceResult = createInstanceHook(pCreateInfo, pAllocator, pInstance);
+-                if (instanceResult != VK_SUCCESS)
+-                    throw LSFG::vulkan_error(instanceResult, "Unknown error");
++                result = callCreateInstanceHook(
++                    pCreateInfo, pAllocator, pInstance, nextCreateInstance);
++                if (result != VK_SUCCESS)
++                    throw LSFG::vulkan_error(
++                        result, "Hooked vkCreateInstance failed");
+             } catch (const std::exception& e) {
+                 std::cerr << "lsfg-vk: Vulkan instance hook failed; "
+                              "retrying without frame generation:\n";
+                 std::cerr << "- " << e.what() << '\n';
+-                Config::activeConf.enable = false;
+-                instanceResult = next_vkCreateInstance(pCreateInfo, pAllocator, pInstance);
+-                if (instanceResult == VK_SUCCESS)
+-                    initInstanceFunc(*pInstance, "vkCreateDevice", &next_vkCreateDevice);
+-                return instanceResult;
+-            }
+-
+-            // get relevant function pointers from the next layer
+-            success = true;
+-            success &= initInstanceFunc(*pInstance,
+-                "vkDestroyInstance", &next_vkDestroyInstance);
+-            success &= initInstanceFunc(*pInstance,
+-                "vkCreateDevice", &next_vkCreateDevice); // workaround mesa bug
+-            success &= initInstanceFunc(*pInstance,
+-                "vkGetPhysicalDeviceQueueFamilyProperties", &next_vkGetPhysicalDeviceQueueFamilyProperties);
+-            success &= initInstanceFunc(*pInstance,
+-                "vkGetPhysicalDeviceMemoryProperties", &next_vkGetPhysicalDeviceMemoryProperties);
+-            success &= initInstanceFunc(*pInstance,
+-                "vkGetPhysicalDeviceProperties", &next_vkGetPhysicalDeviceProperties);
+-            success &= initInstanceFunc(*pInstance,
+-                "vkGetPhysicalDeviceSurfaceCapabilitiesKHR", &next_vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
+-            if (!success) {
+-                std::cerr << "lsfg-vk: Incomplete instance function table; "
+-                             "continuing without frame generation.\n";
+-                Config::activeConf.enable = false;
+-                return VK_SUCCESS;
++                result = nextCreateInstance(pCreateInfo, pAllocator, pInstance);
++                enabled = false;
+             }
++        } else {
++            result = nextCreateInstance(pCreateInfo, pAllocator, pInstance);
++        }
++        pendingCreateInstance = nullptr;
++        if (result != VK_SUCCESS) return result;
++
++        WowBox::InstanceDispatch dispatch{
++            .enabled = enabled,
++            .application = application,
++            .engine = engine,
++            .getInstanceProcAddr = nextGetInstanceProcAddr
++        };
++        bool complete = true;
++        complete &= loadInstanceFunc(nextGetInstanceProcAddr, *pInstance,
++            "vkDestroyInstance", &dispatch.destroyInstance);
++        complete &= loadInstanceFunc(nextGetInstanceProcAddr, *pInstance,
++            "vkCreateDevice", &dispatch.createDevice);
++        complete &= loadInstanceFunc(nextGetInstanceProcAddr, *pInstance,
++            "vkEnumeratePhysicalDevices", &dispatch.enumeratePhysicalDevices);
++        loadInstanceFunc(nextGetInstanceProcAddr, *pInstance,
++            "vkEnumeratePhysicalDeviceGroups",
++            &dispatch.enumeratePhysicalDeviceGroups, false);
++        complete &= loadInstanceFunc(nextGetInstanceProcAddr, *pInstance,
++            "vkGetPhysicalDeviceQueueFamilyProperties",
++            &dispatch.getQueueFamilyProperties);
++        complete &= loadInstanceFunc(nextGetInstanceProcAddr, *pInstance,
++            "vkGetPhysicalDeviceMemoryProperties",
++            &dispatch.getMemoryProperties);
++        complete &= loadInstanceFunc(nextGetInstanceProcAddr, *pInstance,
++            "vkGetPhysicalDeviceProperties", &dispatch.getProperties);
++        complete &= loadInstanceFunc(nextGetInstanceProcAddr, *pInstance,
++            "vkGetPhysicalDeviceSurfaceCapabilitiesKHR",
++            &dispatch.getSurfaceCapabilities);
++        if (!complete && dispatch.enabled) {
++            std::cerr << "lsfg-vk: Incomplete instance dispatch table; "
++                         "continuing without frame generation for route "
++                      << application << '/' << engine << ".\n";
++            dispatch.enabled = false;
++        }
++        WowBox::registerInstance(*pInstance, dispatch);
+
+-            std::cerr << "lsfg-vk: Vulkan instance layer initialized successfully.\n";
+-        } catch (const std::exception& e) {
+-            std::cerr << "lsfg-vk: An error occurred while initializing the Vulkan instance layer:\n";
+-            std::cerr << "- " << e.what() << '\n';
+-            if (next_vkCreateInstance) {
+-                Config::activeConf.enable = false;
+-                return next_vkCreateInstance(pCreateInfo, pAllocator, pInstance);
+-            }
+-            return VK_ERROR_INITIALIZATION_FAILED;
++        if (dispatch.enabled) {
++            std::cerr << "lsfg-vk: Vulkan instance route initialized: "
++                      << application << '/' << engine << ".\n";
+         }
+         return VK_SUCCESS;
+     }
+
+-    VkResult layer_vkCreateDevice( // NOLINTBEGIN
++    void layer_vkDestroyInstance(
++            VkInstance instance,
++            const VkAllocationCallbacks* pAllocator) {
++        auto dispatch = WowBox::findInstance(instance);
++        if (dispatch && dispatch->destroyInstance)
++            dispatch->destroyInstance(instance, pAllocator);
++        WowBox::removeInstance(instance);
++    }
++
++    VkResult layer_vkEnumeratePhysicalDevices(
++            VkInstance instance,
++            uint32_t* pPhysicalDeviceCount,
++            VkPhysicalDevice* pPhysicalDevices) {
++        return Layer::ovkEnumeratePhysicalDevices(
++            instance, pPhysicalDeviceCount, pPhysicalDevices);
++    }
++
++    VkResult layer_vkEnumeratePhysicalDeviceGroups(
++            VkInstance instance,
++            uint32_t* pPhysicalDeviceGroupCount,
++            VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties) {
++        return Layer::ovkEnumeratePhysicalDeviceGroups(
++            instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties);
++    }
++
++    VkResult layer_vkCreateDevice(
+             VkPhysicalDevice physicalDevice,
+             const VkDeviceCreateInfo* pCreateInfo,
+             const VkAllocationCallbacks* pAllocator,
+             VkDevice* pDevice) {
+-        try {
+-            // prepare layer | NOLINTBEGIN
+-            auto* layerDesc = const_cast<VkLayerDeviceCreateInfo*>(
+-                reinterpret_cast<const VkLayerDeviceCreateInfo*>(pCreateInfo->pNext));
+-            while (layerDesc && (layerDesc->sType != VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO
+-                    || layerDesc->function != VK_LAYER_LINK_INFO)) {
+-                layerDesc = const_cast<VkLayerDeviceCreateInfo*>(
+-                    reinterpret_cast<const VkLayerDeviceCreateInfo*>(layerDesc->pNext));
+-            }
+-            if (!layerDesc)
+-                throw LSFG::vulkan_error(VK_ERROR_INITIALIZATION_FAILED,
+-                    "No layer creation info found in pNext chain");
+-
+-            next_vkGetDeviceProcAddr = layerDesc->u.pLayerInfo->pfnNextGetDeviceProcAddr;
+-            layerDesc->u.pLayerInfo = layerDesc->u.pLayerInfo->pNext;
+-
+-            auto* layerDesc2 = const_cast<VkLayerDeviceCreateInfo*>(
+-                reinterpret_cast<const VkLayerDeviceCreateInfo*>(pCreateInfo->pNext));
+-            while (layerDesc2 && (layerDesc2->sType != VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO
+-                    || layerDesc2->function != VK_LOADER_DATA_CALLBACK)) {
+-                        layerDesc2 = const_cast<VkLayerDeviceCreateInfo*>(
+-                            reinterpret_cast<const VkLayerDeviceCreateInfo*>(layerDesc2->pNext));
+-            }
+-            if (!layerDesc2)
+-                throw LSFG::vulkan_error(VK_ERROR_INITIALIZATION_FAILED,
+-                    "No layer device loader data found in pNext chain");
+-
+-            next_vSetDeviceLoaderData = layerDesc2->u.pfnSetDeviceLoaderData;
++        auto* layerDesc = const_cast<VkLayerDeviceCreateInfo*>(
++            reinterpret_cast<const VkLayerDeviceCreateInfo*>(pCreateInfo->pNext));
++        while (layerDesc && (
++                layerDesc->sType != VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO
++                || layerDesc->function != VK_LAYER_LINK_INFO)) {
++            layerDesc = const_cast<VkLayerDeviceCreateInfo*>(
++                reinterpret_cast<const VkLayerDeviceCreateInfo*>(layerDesc->pNext));
++        }
++        if (!layerDesc) return VK_ERROR_INITIALIZATION_FAILED;
++
++        PFN_vkGetDeviceProcAddr nextGetDeviceProcAddr =
++            layerDesc->u.pLayerInfo->pfnNextGetDeviceProcAddr;
++        layerDesc->u.pLayerInfo = layerDesc->u.pLayerInfo->pNext;
++
++        auto* loaderDesc = const_cast<VkLayerDeviceCreateInfo*>(
++            reinterpret_cast<const VkLayerDeviceCreateInfo*>(pCreateInfo->pNext));
++        while (loaderDesc && (
++                loaderDesc->sType != VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO
++                || loaderDesc->function != VK_LOADER_DATA_CALLBACK)) {
++            loaderDesc = const_cast<VkLayerDeviceCreateInfo*>(
++                reinterpret_cast<const VkLayerDeviceCreateInfo*>(loaderDesc->pNext));
++        }
+
+-            // NOLINTEND | skip initialization if the layer is disabled
+-            if (!Config::activeConf.enable)
+-                return next_vkCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice);
++        auto instanceDispatch = WowBox::findPhysicalDevice(physicalDevice);
++        PFN_vkCreateDevice nextCreateDevice =
++            instanceDispatch ? instanceDispatch->createDevice : nullptr;
++        if (!nextCreateDevice) return VK_ERROR_INITIALIZATION_FAILED;
+
+-            // create device
+-            VkResult deviceResult{};
++        bool enabled = instanceDispatch->enabled && loaderDesc;
++        VkResult result{};
++        if (enabled) {
+             try {
+-                auto* createDeviceHook = reinterpret_cast<PFN_vkCreateDevice>(
+-                    Hooks::hooks["vkCreateDevicePre"]);
+-                deviceResult = createDeviceHook(physicalDevice, pCreateInfo, pAllocator, pDevice);
+-                if (deviceResult != VK_SUCCESS)
+-                    throw LSFG::vulkan_error(deviceResult, "Unknown error");
++                result = callCreateDeviceHook(
++                    physicalDevice, pCreateInfo, pAllocator,
++                    pDevice, nextCreateDevice);
++                if (result != VK_SUCCESS)
++                    throw LSFG::vulkan_error(
++                        result, "Hooked vkCreateDevice failed");
+             } catch (const std::exception& e) {
+                 std::cerr << "lsfg-vk: Vulkan device hook failed; "
+                              "retrying without frame generation:\n";
+                 std::cerr << "- " << e.what() << '\n';
+-                Config::activeConf.enable = false;
+-                return next_vkCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice);
++                result = nextCreateDevice(
++                    physicalDevice, pCreateInfo, pAllocator, pDevice);
++                enabled = false;
+             }
+-
+-            // get relevant function pointers from the next layer
+-            bool success = true;
+-            success &= initDeviceFunc(*pDevice, "vkDestroyDevice", &next_vkDestroyDevice);
+-            success &= initDeviceFunc(*pDevice, "vkCreateSwapchainKHR", &next_vkCreateSwapchainKHR);
+-            success &= initDeviceFunc(*pDevice, "vkQueuePresentKHR", &next_vkQueuePresentKHR);
+-            success &= initDeviceFunc(*pDevice, "vkDestroySwapchainKHR", &next_vkDestroySwapchainKHR);
+-            success &= initDeviceFunc(*pDevice, "vkGetSwapchainImagesKHR", &next_vkGetSwapchainImagesKHR);
+-            success &= initDeviceFunc(*pDevice, "vkAllocateCommandBuffers", &next_vkAllocateCommandBuffers);
+-            success &= initDeviceFunc(*pDevice, "vkFreeCommandBuffers", &next_vkFreeCommandBuffers);
+-            success &= initDeviceFunc(*pDevice, "vkBeginCommandBuffer", &next_vkBeginCommandBuffer);
+-            success &= initDeviceFunc(*pDevice, "vkEndCommandBuffer", &next_vkEndCommandBuffer);
+-            success &= initDeviceFunc(*pDevice, "vkCreateCommandPool", &next_vkCreateCommandPool);
+-            success &= initDeviceFunc(*pDevice, "vkDestroyCommandPool", &next_vkDestroyCommandPool);
+-            success &= initDeviceFunc(*pDevice, "vkCreateImage", &next_vkCreateImage);
+-            success &= initDeviceFunc(*pDevice, "vkDestroyImage", &next_vkDestroyImage);
+-            success &= initDeviceFunc(*pDevice, "vkGetImageMemoryRequirements", &next_vkGetImageMemoryRequirements);
+-            success &= initDeviceFunc(*pDevice, "vkBindImageMemory", &next_vkBindImageMemory);
+-#ifndef __ANDROID__
+-            success &= initDeviceFunc(*pDevice, "vkGetMemoryFdKHR", &next_vkGetMemoryFdKHR);
+-#else
+-            initDeviceFunc(*pDevice, "vkGetMemoryFdKHR", &next_vkGetMemoryFdKHR);
+-#endif
+-            success &= initDeviceFunc(*pDevice, "vkAllocateMemory", &next_vkAllocateMemory);
+-            success &= initDeviceFunc(*pDevice, "vkFreeMemory", &next_vkFreeMemory);
+-            success &= initDeviceFunc(*pDevice, "vkCreateSemaphore", &next_vkCreateSemaphore);
+-            success &= initDeviceFunc(*pDevice, "vkDestroySemaphore", &next_vkDestroySemaphore);
++        } else {
++            result = nextCreateDevice(
++                physicalDevice, pCreateInfo, pAllocator, pDevice);
++        }
++        pendingCreateDevice = nullptr;
++        if (result != VK_SUCCESS) return result;
++
++        WowBox::DeviceDispatch dispatch{
++            .enabled = enabled,
++            .instance = WowBox::findPhysicalDeviceInstance(physicalDevice),
++            .application = instanceDispatch->application,
++            .engine = instanceDispatch->engine,
++            .getDeviceProcAddr = nextGetDeviceProcAddr,
++            .setDeviceLoaderData = loaderDesc
++                ? loaderDesc->u.pfnSetDeviceLoaderData : nullptr
++        };
++        bool complete = dispatch.setDeviceLoaderData || !dispatch.enabled;
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkDestroyDevice", &dispatch.destroyDevice);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkCreateSwapchainKHR", &dispatch.createSwapchain);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkQueuePresentKHR", &dispatch.queuePresent);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkDestroySwapchainKHR", &dispatch.destroySwapchain);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkGetSwapchainImagesKHR", &dispatch.getSwapchainImages);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkAllocateCommandBuffers", &dispatch.allocateCommandBuffers);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkFreeCommandBuffers", &dispatch.freeCommandBuffers);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkBeginCommandBuffer", &dispatch.beginCommandBuffer);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkEndCommandBuffer", &dispatch.endCommandBuffer);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkCreateCommandPool", &dispatch.createCommandPool);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkDestroyCommandPool", &dispatch.destroyCommandPool);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkCreateImage", &dispatch.createImage);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkDestroyImage", &dispatch.destroyImage);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkGetImageMemoryRequirements",
++            &dispatch.getImageMemoryRequirements);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkBindImageMemory", &dispatch.bindImageMemory);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkAllocateMemory", &dispatch.allocateMemory);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkFreeMemory", &dispatch.freeMemory);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkCreateSemaphore", &dispatch.createSemaphore);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkDestroySemaphore", &dispatch.destroySemaphore);
+ #ifndef __ANDROID__
+-            success &= initDeviceFunc(*pDevice, "vkGetSemaphoreFdKHR", &next_vkGetSemaphoreFdKHR);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkGetMemoryFdKHR", &dispatch.getMemoryFd);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkGetSemaphoreFdKHR", &dispatch.getSemaphoreFd);
+ #else
+-            initDeviceFunc(*pDevice, "vkGetSemaphoreFdKHR", &next_vkGetSemaphoreFdKHR);
++        loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkGetMemoryFdKHR", &dispatch.getMemoryFd, false);
++        loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkGetSemaphoreFdKHR", &dispatch.getSemaphoreFd, false);
++        loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkGetAndroidHardwareBufferPropertiesANDROID",
++            &dispatch.getAhbProperties, false);
+ #endif
+-#ifdef __ANDROID__
+-            // AHB function is optional — not all ICDs (e.g. Vortek wrapper) support it.
+-            // If unavailable, the AHB image path will fail at point-of-use, but
+-            // the layer still initializes so it can fall back gracefully.
+-            initDeviceFunc(*pDevice, "vkGetAndroidHardwareBufferPropertiesANDROID", &next_vkGetAndroidHardwareBufferPropertiesANDROID);
+-#endif
+-            success &= initDeviceFunc(*pDevice, "vkGetDeviceQueue", &next_vkGetDeviceQueue);
+-            success &= initDeviceFunc(*pDevice, "vkQueueSubmit", &next_vkQueueSubmit);
+-            success &= initDeviceFunc(*pDevice, "vkCmdPipelineBarrier", &next_vkCmdPipelineBarrier);
+-            success &= initDeviceFunc(*pDevice, "vkCmdBlitImage", &next_vkCmdBlitImage);
+-            success &= initDeviceFunc(*pDevice, "vkAcquireNextImageKHR", &next_vkAcquireNextImageKHR);
+-            if (!success) {
+-                std::cerr << "lsfg-vk: Incomplete device function table; "
+-                             "continuing without frame generation.\n";
+-                Config::activeConf.enable = false;
+-                return VK_SUCCESS;
+-            }
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkGetDeviceQueue", &dispatch.getDeviceQueue);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkQueueSubmit", &dispatch.queueSubmit);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkCmdPipelineBarrier", &dispatch.cmdPipelineBarrier);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkCmdBlitImage", &dispatch.cmdBlitImage);
++        complete &= loadDeviceFunc(nextGetDeviceProcAddr, *pDevice,
++            "vkAcquireNextImageKHR", &dispatch.acquireNextImage);
++        if (!complete && dispatch.enabled) {
++            std::cerr << "lsfg-vk: Incomplete device dispatch table; "
++                         "continuing without frame generation for route "
++                      << dispatch.application << '/' << dispatch.engine << ".\n";
++            dispatch.enabled = false;
++        }
++        WowBox::registerDevice(*pDevice, dispatch);
+
+-            auto postCreateDeviceHook = reinterpret_cast<PFN_vkCreateDevice>(
+-                Hooks::hooks["vkCreateDevicePost"]);
+-            auto res = postCreateDeviceHook(physicalDevice, pCreateInfo, pAllocator, pDevice);
+-            if (res != VK_SUCCESS) {
++        if (dispatch.enabled) {
++            try {
++                auto* postHook = reinterpret_cast<PFN_vkCreateDevice>(
++                    Hooks::hooks.at("vkCreateDevicePost"));
++                VkResult postResult = postHook(
++                    physicalDevice, pCreateInfo, pAllocator, pDevice);
++                if (postResult != VK_SUCCESS)
++                    throw LSFG::vulkan_error(
++                        postResult, "Device bookkeeping failed");
++                std::cerr << "lsfg-vk: Vulkan device route initialized: "
++                          << dispatch.application << '/' << dispatch.engine << ".\n";
++            } catch (const std::exception& e) {
+                 std::cerr << "lsfg-vk: Device bookkeeping failed; "
+-                             "continuing without frame generation.\n";
+-                Config::activeConf.enable = false;
+-                return VK_SUCCESS;
+-            }
+-
+-            std::cerr << "lsfg-vk: Vulkan device layer initialized successfully.\n";
+-        } catch (const std::exception& e) {
+-            std::cerr << "lsfg-vk: An error occurred while initializing the Vulkan device layer:\n";
+-            std::cerr << "- " << e.what() << '\n';
+-            if (next_vkCreateDevice) {
+-                Config::activeConf.enable = false;
+-                return next_vkCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice);
++                             "continuing without frame generation:\n";
++                std::cerr << "- " << e.what() << '\n';
++                dispatch.enabled = false;
++                WowBox::registerDevice(*pDevice, dispatch);
+             }
+-            return VK_ERROR_INITIALIZATION_FAILED;
+         }
+         return VK_SUCCESS;
+-    } // NOLINTEND
++    }
++
++    void layer_vkDestroyDevice(
++            VkDevice device,
++            const VkAllocationCallbacks* pAllocator) {
++        auto dispatch = WowBox::findDevice(device);
++        if (dispatch && dispatch->enabled) {
++            auto hook = reinterpret_cast<PFN_vkDestroyDevice>(
++                Hooks::hooks.at("vkDestroyDevice"));
++            hook(device, pAllocator);
++        } else {
++            Layer::ovkDestroyDevice(device, pAllocator);
++        }
++    }
+ }
+
+-const std::unordered_map<std::string, PFN_vkVoidFunction> layerFunctions = {
+-    { "vkCreateInstance",
+-        reinterpret_cast<PFN_vkVoidFunction>(&layer_vkCreateInstance) },
+-    { "vkCreateDevice",
+-        reinterpret_cast<PFN_vkVoidFunction>(&layer_vkCreateDevice) },
+-    { "vkGetInstanceProcAddr",
+-        reinterpret_cast<PFN_vkVoidFunction>(&layer_vkGetInstanceProcAddr) },
+-    { "vkGetDeviceProcAddr",
+-        reinterpret_cast<PFN_vkVoidFunction>(&layer_vkGetDeviceProcAddr) },
+-};
+-
+-PFN_vkVoidFunction layer_vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
++PFN_vkVoidFunction layer_vkGetInstanceProcAddr(
++        VkInstance instance, const char* pName) {
++    if (!pName) return nullptr;
+     const std::string name(pName);
+-    auto it = layerFunctions.find(name);
+-    if (it != layerFunctions.end())
+-        return it->second;
+-
+-    it = Hooks::hooks.find(name);
+-    if (it != Hooks::hooks.end() && Config::activeConf.enable)
+-        return it->second;
+-
+-    return next_vkGetInstanceProcAddr(instance, pName);
++    if (name == "vkCreateInstance")
++        return reinterpret_cast<PFN_vkVoidFunction>(&layer_vkCreateInstance);
++    if (name == "vkGetInstanceProcAddr")
++        return reinterpret_cast<PFN_vkVoidFunction>(&layer_vkGetInstanceProcAddr);
++
++    auto dispatch = WowBox::findInstance(instance);
++    if (!dispatch) return nullptr;
++
++    // Always retain enough of the chain to register physical devices, create a
++    // per-device dispatch table, and erase state on teardown. Inactive routes
++    // otherwise pass every call directly to the next layer.
++    if (name == "vkDestroyInstance")
++        return reinterpret_cast<PFN_vkVoidFunction>(&layer_vkDestroyInstance);
++    if (name == "vkCreateDevice")
++        return reinterpret_cast<PFN_vkVoidFunction>(&layer_vkCreateDevice);
++    if (name == "vkEnumeratePhysicalDevices")
++        return reinterpret_cast<PFN_vkVoidFunction>(
++            &layer_vkEnumeratePhysicalDevices);
++    if (name == "vkEnumeratePhysicalDeviceGroups"
++            && dispatch->enumeratePhysicalDeviceGroups) {
++        return reinterpret_cast<PFN_vkVoidFunction>(
++            &layer_vkEnumeratePhysicalDeviceGroups);
++    }
++
++    if (dispatch->enabled) {
++        auto hook = Hooks::hooks.find(name);
++        if (hook != Hooks::hooks.end())
++            return hook->second;
++    }
++    return dispatch->getInstanceProcAddr
++        ? dispatch->getInstanceProcAddr(instance, pName)
++        : nullptr;
+ }
+
+-PFN_vkVoidFunction layer_vkGetDeviceProcAddr(VkDevice device, const char* pName) {
++PFN_vkVoidFunction layer_vkGetDeviceProcAddr(
++        VkDevice device, const char* pName) {
++    if (!pName) return nullptr;
+     const std::string name(pName);
+-    auto it = layerFunctions.find(name);
+-    if (it != layerFunctions.end())
+-        return it->second;
+-
+-    it = Hooks::hooks.find(name);
+-    if (it != Hooks::hooks.end() && Config::activeConf.enable)
+-        return it->second;
+-
+-    return next_vkGetDeviceProcAddr(device, pName);
++    if (name == "vkGetDeviceProcAddr")
++        return reinterpret_cast<PFN_vkVoidFunction>(&layer_vkGetDeviceProcAddr);
++
++    auto dispatch = WowBox::findDevice(device);
++    if (!dispatch) return nullptr;
++    if (name == "vkDestroyDevice")
++        return reinterpret_cast<PFN_vkVoidFunction>(&layer_vkDestroyDevice);
++    if (dispatch->enabled) {
++        auto hook = Hooks::hooks.find(name);
++        if (hook != Hooks::hooks.end())
++            return hook->second;
++    }
++    return dispatch->getDeviceProcAddr
++        ? dispatch->getDeviceProcAddr(device, pName)
++        : nullptr;
+ }
+
+-// original functions
+ namespace Layer {
+     VkResult ovkCreateInstance(
+             const VkInstanceCreateInfo* pCreateInfo,
+             const VkAllocationCallbacks* pAllocator,
+             VkInstance* pInstance) {
+-        return next_vkCreateInstance(pCreateInfo, pAllocator, pInstance);
++        return pendingCreateInstance
++            ? pendingCreateInstance(pCreateInfo, pAllocator, pInstance)
++            : VK_ERROR_INITIALIZATION_FAILED;
+     }
++
+     void ovkDestroyInstance(
+             VkInstance instance,
+             const VkAllocationCallbacks* pAllocator) {
+-        next_vkDestroyInstance(instance, pAllocator);
++        auto dispatch = WowBox::findInstance(instance);
++        if (dispatch && dispatch->destroyInstance)
++            dispatch->destroyInstance(instance, pAllocator);
++        WowBox::removeInstance(instance);
+     }
+
+     VkResult ovkCreateDevice(
+@@ -418,50 +507,122 @@ namespace Layer {
+             const VkDeviceCreateInfo* pCreateInfo,
+             const VkAllocationCallbacks* pAllocator,
+             VkDevice* pDevice) {
+-        return next_vkCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice);
++        return pendingCreateDevice
++            ? pendingCreateDevice(
++                physicalDevice, pCreateInfo, pAllocator, pDevice)
++            : VK_ERROR_INITIALIZATION_FAILED;
+     }
++
+     void ovkDestroyDevice(
+             VkDevice device,
+             const VkAllocationCallbacks* pAllocator) {
+-        next_vkDestroyDevice(device, pAllocator);
++        auto dispatch = WowBox::findDevice(device);
++        if (dispatch && dispatch->destroyDevice)
++            dispatch->destroyDevice(device, pAllocator);
++        WowBox::removeDevice(device);
+     }
+
+     VkResult ovkSetDeviceLoaderData(VkDevice device, void* object) {
+-        return next_vSetDeviceLoaderData(device, object);
++        auto dispatch = WowBox::findDevice(device);
++        return dispatch && dispatch->setDeviceLoaderData
++            ? dispatch->setDeviceLoaderData(device, object)
++            : VK_ERROR_INITIALIZATION_FAILED;
+     }
+
+     PFN_vkVoidFunction ovkGetInstanceProcAddr(
+             VkInstance instance,
+             const char* pName) {
+-        return next_vkGetInstanceProcAddr(instance, pName);
++        auto dispatch = WowBox::findInstance(instance);
++        return dispatch && dispatch->getInstanceProcAddr
++            ? dispatch->getInstanceProcAddr(instance, pName)
++            : nullptr;
+     }
++
+     PFN_vkVoidFunction ovkGetDeviceProcAddr(
+             VkDevice device,
+             const char* pName) {
+-        return next_vkGetDeviceProcAddr(device, pName);
++        auto dispatch = WowBox::findDevice(device);
++        return dispatch && dispatch->getDeviceProcAddr
++            ? dispatch->getDeviceProcAddr(device, pName)
++            : nullptr;
++    }
++
++    VkResult ovkEnumeratePhysicalDevices(
++            VkInstance instance,
++            uint32_t* pPhysicalDeviceCount,
++            VkPhysicalDevice* pPhysicalDevices) {
++        auto dispatch = WowBox::findInstance(instance);
++        if (!dispatch || !dispatch->enumeratePhysicalDevices)
++            return VK_ERROR_INITIALIZATION_FAILED;
++        VkResult result = dispatch->enumeratePhysicalDevices(
++            instance, pPhysicalDeviceCount, pPhysicalDevices);
++        if ((result == VK_SUCCESS || result == VK_INCOMPLETE)
++                && pPhysicalDevices && pPhysicalDeviceCount) {
++            WowBox::registerPhysicalDevices(
++                instance, *pPhysicalDeviceCount, pPhysicalDevices);
++        }
++        return result;
++    }
++
++    VkResult ovkEnumeratePhysicalDeviceGroups(
++            VkInstance instance,
++            uint32_t* pPhysicalDeviceGroupCount,
++            VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties) {
++        auto dispatch = WowBox::findInstance(instance);
++        if (!dispatch || !dispatch->enumeratePhysicalDeviceGroups)
++            return VK_ERROR_INITIALIZATION_FAILED;
++        VkResult result = dispatch->enumeratePhysicalDeviceGroups(
++            instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties);
++        if ((result == VK_SUCCESS || result == VK_INCOMPLETE)
++                && pPhysicalDeviceGroupProperties
++                && pPhysicalDeviceGroupCount) {
++            for (uint32_t i = 0; i < *pPhysicalDeviceGroupCount; ++i) {
++                const auto& group = pPhysicalDeviceGroupProperties[i];
++                WowBox::registerPhysicalDevices(
++                    instance, group.physicalDeviceCount, group.physicalDevices);
++            }
++        }
++        return result;
+     }
+
+     void ovkGetPhysicalDeviceQueueFamilyProperties(
+             VkPhysicalDevice physicalDevice,
+-            uint32_t* pQueueFamilyPropertyCount,
+-            VkQueueFamilyProperties* pQueueFamilyProperties) {
+-        next_vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties);
++            uint32_t* pPhysicalDeviceQueueFamilyPropertyCount,
++            VkQueueFamilyProperties* pPhysicalDeviceQueueFamilyProperties) {
++        auto dispatch = WowBox::findPhysicalDevice(physicalDevice);
++        if (dispatch && dispatch->getQueueFamilyProperties) {
++            dispatch->getQueueFamilyProperties(
++                physicalDevice,
++                pPhysicalDeviceQueueFamilyPropertyCount,
++                pPhysicalDeviceQueueFamilyProperties);
++        }
+     }
++
+     void ovkGetPhysicalDeviceMemoryProperties(
+             VkPhysicalDevice physicalDevice,
+             VkPhysicalDeviceMemoryProperties* pMemoryProperties) {
+-        next_vkGetPhysicalDeviceMemoryProperties(physicalDevice, pMemoryProperties);
++        auto dispatch = WowBox::findPhysicalDevice(physicalDevice);
++        if (dispatch && dispatch->getMemoryProperties)
++            dispatch->getMemoryProperties(physicalDevice, pMemoryProperties);
+     }
++
+     void ovkGetPhysicalDeviceProperties(
+             VkPhysicalDevice physicalDevice,
+             VkPhysicalDeviceProperties* pProperties) {
+-        next_vkGetPhysicalDeviceProperties(physicalDevice, pProperties);
++        auto dispatch = WowBox::findPhysicalDevice(physicalDevice);
++        if (dispatch && dispatch->getProperties)
++            dispatch->getProperties(physicalDevice, pProperties);
+     }
++
+     VkResult ovkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+             VkPhysicalDevice physicalDevice,
+             VkSurfaceKHR surface,
+             VkSurfaceCapabilitiesKHR* pSurfaceCapabilities) {
+-        return next_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, pSurfaceCapabilities);
++        auto dispatch = WowBox::findPhysicalDevice(physicalDevice);
++        return dispatch && dispatch->getSurfaceCapabilities
++            ? dispatch->getSurfaceCapabilities(
++                physicalDevice, surface, pSurfaceCapabilities)
++            : VK_ERROR_INITIALIZATION_FAILED;
+     }
+
+     VkResult ovkCreateSwapchainKHR(
+@@ -469,18 +630,35 @@ namespace Layer {
+             const VkSwapchainCreateInfoKHR* pCreateInfo,
+             const VkAllocationCallbacks* pAllocator,
+             VkSwapchainKHR* pSwapchain) {
+-        return next_vkCreateSwapchainKHR(device, pCreateInfo, pAllocator, pSwapchain);
++        auto dispatch = WowBox::findDevice(device);
++        if (!dispatch || !dispatch->createSwapchain)
++            return VK_ERROR_INITIALIZATION_FAILED;
++        VkResult result = dispatch->createSwapchain(
++            device, pCreateInfo, pAllocator, pSwapchain);
++        if (result == VK_SUCCESS)
++            WowBox::registerSwapchain(*pSwapchain, device);
++        return result;
+     }
++
+     VkResult ovkQueuePresentKHR(
+             VkQueue queue,
+             const VkPresentInfoKHR* pPresentInfo) {
+-        return next_vkQueuePresentKHR(queue, pPresentInfo);
++        auto dispatch = WowBox::findQueue(queue);
++        if (!dispatch && pPresentInfo && pPresentInfo->swapchainCount)
++            dispatch = WowBox::findSwapchain(*pPresentInfo->pSwapchains);
++        return dispatch && dispatch->queuePresent
++            ? dispatch->queuePresent(queue, pPresentInfo)
++            : VK_ERROR_INITIALIZATION_FAILED;
+     }
++
+     void ovkDestroySwapchainKHR(
+             VkDevice device,
+             VkSwapchainKHR swapchain,
+             const VkAllocationCallbacks* pAllocator) {
+-        next_vkDestroySwapchainKHR(device, swapchain, pAllocator);
++        auto dispatch = WowBox::findDevice(device);
++        if (dispatch && dispatch->destroySwapchain)
++            dispatch->destroySwapchain(device, swapchain, pAllocator);
++        WowBox::removeSwapchain(swapchain);
+     }
+
+     VkResult ovkGetSwapchainImagesKHR(
+@@ -488,31 +666,57 @@ namespace Layer {
+             VkSwapchainKHR swapchain,
+             uint32_t* pSwapchainImageCount,
+             VkImage* pSwapchainImages) {
+-        return next_vkGetSwapchainImagesKHR(device, swapchain, pSwapchainImageCount, pSwapchainImages);
++        auto dispatch = WowBox::findDevice(device);
++        return dispatch && dispatch->getSwapchainImages
++            ? dispatch->getSwapchainImages(
++                device, swapchain, pSwapchainImageCount, pSwapchainImages)
++            : VK_ERROR_INITIALIZATION_FAILED;
+     }
+
+     VkResult ovkAllocateCommandBuffers(
+             VkDevice device,
+             const VkCommandBufferAllocateInfo* pAllocateInfo,
+             VkCommandBuffer* pCommandBuffers) {
+-        return next_vkAllocateCommandBuffers(device, pAllocateInfo, pCommandBuffers);
++        auto dispatch = WowBox::findDevice(device);
++        if (!dispatch || !dispatch->allocateCommandBuffers)
++            return VK_ERROR_INITIALIZATION_FAILED;
++        VkResult result = dispatch->allocateCommandBuffers(
++            device, pAllocateInfo, pCommandBuffers);
++        if (result == VK_SUCCESS) {
++            WowBox::registerCommandBuffers(
++                device, pAllocateInfo->commandBufferCount, pCommandBuffers);
++        }
++        return result;
+     }
++
+     void ovkFreeCommandBuffers(
+             VkDevice device,
+             VkCommandPool commandPool,
+             uint32_t commandBufferCount,
+             const VkCommandBuffer* pCommandBuffers) {
+-        next_vkFreeCommandBuffers(device, commandPool, commandBufferCount, pCommandBuffers);
++        auto dispatch = WowBox::findDevice(device);
++        if (dispatch && dispatch->freeCommandBuffers) {
++            dispatch->freeCommandBuffers(
++                device, commandPool, commandBufferCount, pCommandBuffers);
++        }
++        WowBox::removeCommandBuffers(
++            commandBufferCount, pCommandBuffers);
+     }
+
+     VkResult ovkBeginCommandBuffer(
+             VkCommandBuffer commandBuffer,
+             const VkCommandBufferBeginInfo* pBeginInfo) {
+-        return next_vkBeginCommandBuffer(commandBuffer, pBeginInfo);
++        auto dispatch = WowBox::findCommandBuffer(commandBuffer);
++        return dispatch && dispatch->beginCommandBuffer
++            ? dispatch->beginCommandBuffer(commandBuffer, pBeginInfo)
++            : VK_ERROR_INITIALIZATION_FAILED;
+     }
+-    VkResult ovkEndCommandBuffer(
+-            VkCommandBuffer commandBuffer) {
+-        return next_vkEndCommandBuffer(commandBuffer);
++
++    VkResult ovkEndCommandBuffer(VkCommandBuffer commandBuffer) {
++        auto dispatch = WowBox::findCommandBuffer(commandBuffer);
++        return dispatch && dispatch->endCommandBuffer
++            ? dispatch->endCommandBuffer(commandBuffer)
++            : VK_ERROR_INITIALIZATION_FAILED;
+     }
+
+     VkResult ovkCreateCommandPool(
+@@ -520,13 +724,20 @@ namespace Layer {
+             const VkCommandPoolCreateInfo* pCreateInfo,
+             const VkAllocationCallbacks* pAllocator,
+             VkCommandPool* pCommandPool) {
+-        return  next_vkCreateCommandPool(device, pCreateInfo, pAllocator, pCommandPool);
++        auto dispatch = WowBox::findDevice(device);
++        return dispatch && dispatch->createCommandPool
++            ? dispatch->createCommandPool(
++                device, pCreateInfo, pAllocator, pCommandPool)
++            : VK_ERROR_INITIALIZATION_FAILED;
+     }
++
+     void ovkDestroyCommandPool(
+             VkDevice device,
+             VkCommandPool commandPool,
+             const VkAllocationCallbacks* pAllocator) {
+-        next_vkDestroyCommandPool(device, commandPool, pAllocator);
++        auto dispatch = WowBox::findDevice(device);
++        if (dispatch && dispatch->destroyCommandPool)
++            dispatch->destroyCommandPool(device, commandPool, pAllocator);
+     }
+
+     VkResult ovkCreateImage(
+@@ -534,27 +745,41 @@ namespace Layer {
+             const VkImageCreateInfo* pCreateInfo,
+             const VkAllocationCallbacks* pAllocator,
+             VkImage* pImage) {
+-        return next_vkCreateImage(device, pCreateInfo, pAllocator, pImage);
++        auto dispatch = WowBox::findDevice(device);
++        return dispatch && dispatch->createImage
++            ? dispatch->createImage(device, pCreateInfo, pAllocator, pImage)
++            : VK_ERROR_INITIALIZATION_FAILED;
+     }
++
+     void ovkDestroyImage(
+             VkDevice device,
+             VkImage image,
+             const VkAllocationCallbacks* pAllocator) {
+-        next_vkDestroyImage(device, image, pAllocator);
++        auto dispatch = WowBox::findDevice(device);
++        if (dispatch && dispatch->destroyImage)
++            dispatch->destroyImage(device, image, pAllocator);
+     }
+
+     void ovkGetImageMemoryRequirements(
+             VkDevice device,
+             VkImage image,
+             VkMemoryRequirements* pMemoryRequirements) {
+-        next_vkGetImageMemoryRequirements(device, image, pMemoryRequirements);
++        auto dispatch = WowBox::findDevice(device);
++        if (dispatch && dispatch->getImageMemoryRequirements)
++            dispatch->getImageMemoryRequirements(
++                device, image, pMemoryRequirements);
+     }
++
+     VkResult ovkBindImageMemory(
+             VkDevice device,
+             VkImage image,
+             VkDeviceMemory memory,
+             VkDeviceSize memoryOffset) {
+-        return next_vkBindImageMemory(device, image, memory, memoryOffset);
++        auto dispatch = WowBox::findDevice(device);
++        return dispatch && dispatch->bindImageMemory
++            ? dispatch->bindImageMemory(
++                device, image, memory, memoryOffset)
++            : VK_ERROR_INITIALIZATION_FAILED;
+     }
+
+     VkResult ovkAllocateMemory(
+@@ -562,13 +787,20 @@ namespace Layer {
+             const VkMemoryAllocateInfo* pAllocateInfo,
+             const VkAllocationCallbacks* pAllocator,
+             VkDeviceMemory* pMemory) {
+-        return next_vkAllocateMemory(device, pAllocateInfo, pAllocator, pMemory);
++        auto dispatch = WowBox::findDevice(device);
++        return dispatch && dispatch->allocateMemory
++            ? dispatch->allocateMemory(
++                device, pAllocateInfo, pAllocator, pMemory)
++            : VK_ERROR_OUT_OF_DEVICE_MEMORY;
+     }
++
+     void ovkFreeMemory(
+             VkDevice device,
+             VkDeviceMemory memory,
+             const VkAllocationCallbacks* pAllocator) {
+-        next_vkFreeMemory(device, memory, pAllocator);
++        auto dispatch = WowBox::findDevice(device);
++        if (dispatch && dispatch->freeMemory)
++            dispatch->freeMemory(device, memory, pAllocator);
+     }
+
+     VkResult ovkCreateSemaphore(
+@@ -576,26 +808,40 @@ namespace Layer {
+             const VkSemaphoreCreateInfo* pCreateInfo,
+             const VkAllocationCallbacks* pAllocator,
+             VkSemaphore* pSemaphore) {
+-        return next_vkCreateSemaphore(device, pCreateInfo, pAllocator, pSemaphore);
++        auto dispatch = WowBox::findDevice(device);
++        return dispatch && dispatch->createSemaphore
++            ? dispatch->createSemaphore(
++                device, pCreateInfo, pAllocator, pSemaphore)
++            : VK_ERROR_INITIALIZATION_FAILED;
+     }
++
+     void ovkDestroySemaphore(
+             VkDevice device,
+             VkSemaphore semaphore,
+             const VkAllocationCallbacks* pAllocator) {
+-        next_vkDestroySemaphore(device, semaphore, pAllocator);
++        auto dispatch = WowBox::findDevice(device);
++        if (dispatch && dispatch->destroySemaphore)
++            dispatch->destroySemaphore(device, semaphore, pAllocator);
+     }
+
+     VkResult ovkGetMemoryFdKHR(
+             VkDevice device,
+             const VkMemoryGetFdInfoKHR* pGetFdInfo,
+             int* pFd) {
+-        return next_vkGetMemoryFdKHR(device, pGetFdInfo, pFd);
++        auto dispatch = WowBox::findDevice(device);
++        return dispatch && dispatch->getMemoryFd
++            ? dispatch->getMemoryFd(device, pGetFdInfo, pFd)
++            : VK_ERROR_EXTENSION_NOT_PRESENT;
+     }
++
+     VkResult ovkGetSemaphoreFdKHR(
+             VkDevice device,
+             const VkSemaphoreGetFdInfoKHR* pGetFdInfo,
+             int* pFd) {
+-        return next_vkGetSemaphoreFdKHR(device, pGetFdInfo, pFd);
++        auto dispatch = WowBox::findDevice(device);
++        return dispatch && dispatch->getSemaphoreFd
++            ? dispatch->getSemaphoreFd(device, pGetFdInfo, pFd)
++            : VK_ERROR_EXTENSION_NOT_PRESENT;
+     }
+
+ #ifdef __ANDROID__
+@@ -603,7 +849,10 @@ namespace Layer {
+             VkDevice device,
+             const AHardwareBuffer* hardwareBuffer,
+             VkAndroidHardwareBufferPropertiesANDROID* pProperties) {
+-        return next_vkGetAndroidHardwareBufferPropertiesANDROID(device, hardwareBuffer, pProperties);
++        auto dispatch = WowBox::findDevice(device);
++        return dispatch && dispatch->getAhbProperties
++            ? dispatch->getAhbProperties(device, hardwareBuffer, pProperties)
++            : VK_ERROR_EXTENSION_NOT_PRESENT;
+     }
+ #endif
+
+@@ -612,14 +861,23 @@ namespace Layer {
+             uint32_t queueFamilyIndex,
+             uint32_t queueIndex,
+             VkQueue* pQueue) {
+-        next_vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, pQueue);
++        auto dispatch = WowBox::findDevice(device);
++        if (dispatch && dispatch->getDeviceQueue) {
++            dispatch->getDeviceQueue(
++                device, queueFamilyIndex, queueIndex, pQueue);
++            if (pQueue) WowBox::registerQueue(*pQueue, device);
++        }
+     }
++
+     VkResult ovkQueueSubmit(
+             VkQueue queue,
+             uint32_t submitCount,
+             const VkSubmitInfo* pSubmits,
+             VkFence fence) {
+-        return next_vkQueueSubmit(queue, submitCount, pSubmits, fence);
++        auto dispatch = WowBox::findQueue(queue);
++        return dispatch && dispatch->queueSubmit
++            ? dispatch->queueSubmit(queue, submitCount, pSubmits, fence)
++            : VK_ERROR_INITIALIZATION_FAILED;
+     }
+
+     void ovkCmdPipelineBarrier(
+@@ -633,11 +891,16 @@ namespace Layer {
+             const VkBufferMemoryBarrier* pBufferMemoryBarriers,
+             uint32_t imageMemoryBarrierCount,
+             const VkImageMemoryBarrier* pImageMemoryBarriers) {
+-        next_vkCmdPipelineBarrier(commandBuffer, srcStageMask, dstStageMask, dependencyFlags,
+-            memoryBarrierCount, pMemoryBarriers,
+-            bufferMemoryBarrierCount, pBufferMemoryBarriers,
+-            imageMemoryBarrierCount, pImageMemoryBarriers);
++        auto dispatch = WowBox::findCommandBuffer(commandBuffer);
++        if (dispatch && dispatch->cmdPipelineBarrier) {
++            dispatch->cmdPipelineBarrier(
++                commandBuffer, srcStageMask, dstStageMask, dependencyFlags,
++                memoryBarrierCount, pMemoryBarriers,
++                bufferMemoryBarrierCount, pBufferMemoryBarriers,
++                imageMemoryBarrierCount, pImageMemoryBarriers);
++        }
+     }
++
+     void ovkCmdBlitImage(
+             VkCommandBuffer commandBuffer,
+             VkImage srcImage,
+@@ -647,7 +910,12 @@ namespace Layer {
+             uint32_t regionCount,
+             const VkImageBlit* pRegions,
+             VkFilter filter) {
+-        next_vkCmdBlitImage(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions, filter);
++        auto dispatch = WowBox::findCommandBuffer(commandBuffer);
++        if (dispatch && dispatch->cmdBlitImage) {
++            dispatch->cmdBlitImage(
++                commandBuffer, srcImage, srcImageLayout,
++                dstImage, dstImageLayout, regionCount, pRegions, filter);
++        }
+     }
+
+     VkResult ovkAcquireNextImageKHR(
+@@ -657,6 +925,20 @@ namespace Layer {
+             VkSemaphore semaphore,
+             VkFence fence,
+             uint32_t* pImageIndex) {
+-        return next_vkAcquireNextImageKHR(device, swapchain, timeout, semaphore, fence, pImageIndex);
++        auto dispatch = WowBox::findDevice(device);
++        return dispatch && dispatch->acquireNextImage
++            ? dispatch->acquireNextImage(
++                device, swapchain, timeout, semaphore, fence, pImageIndex)
++            : VK_ERROR_INITIALIZATION_FAILED;
++    }
++
++    std::string applicationName(VkDevice device) {
++        auto dispatch = WowBox::findDevice(device);
++        return dispatch ? dispatch->application : std::string();
++    }
++
++    std::string engineName(VkDevice device) {
++        auto dispatch = WowBox::findDevice(device);
++        return dispatch ? dispatch->engine : std::string();
+     }
+ }
+diff --git a/framegen/src/core/device.cpp b/framegen/src/core/device.cpp
+index b323c3c..e40e51f 100644
+--- a/framegen/src/core/device.cpp
++++ b/framegen/src/core/device.cpp
+@@ -31,7 +31,7 @@ namespace LSFG::Core {
+ extern const char* kFramegenBuildStamp;
+ const char* kFramegenBuildStamp =
+     "framegen source: feb7899a6d0f419e27bf47102b6df8ff17e50122 "
+-    "wowbox-allowlist-fail-open-v1";
++    "wowbox-route-isolation-v2";
+ }
+
+ using namespace LSFG::Core;

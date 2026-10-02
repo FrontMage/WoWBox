@@ -1,0 +1,186 @@
+{
+  "schemaVersion": 1,
+  "active": {
+    "base-imagefs": "imagefs-wowbox-openfonts-afebea0a.txz",
+    "graphics-wrapper-stack": "graphics_driver/graphics-stack-frontmage-bionic-a93355a9.tzst",
+    "frame-generation-stack": "frame_generation/lsfg-vk-feb7899-wowbox-route-v3-8c31f59a.tzst",
+    "wine-runtime": "wine-runtime-wowbox-openfonts-9ac94fff.txz",
+    "prefix-template": "wine-prefix-wowbox-openfonts-350c6f28.tzst",
+    "input-bridge-stack": "winhandler/winhandler-xinput-wow-filtered-arm64x-437d6859.tzst",
+    "cpu-emu-stack": "fexcore/fexcore-2508-frontmage-bnet-99d69a-native-mock-jemalloc-5f1dbc8d.tzst",
+    "dx-wrapper-stack": "dxwrapper/dxvk-2.7.1-vkd3d-3.1.0-wowclassic-f1d78e4d-amd64.tzst",
+    "gpu-driver-stack": "graphics_driver/adrenotools-turnip26.1.5-frontmage-ir3-nonstrict-ebad131-abc97b08.tzst"
+  },
+  "assets": [
+    {
+      "role": "frame-generation-stack",
+      "assetPath": "frame_generation/lsfg-vk-feb7899-wowbox-route-v3-8c31f59a.tzst",
+      "filename": "lsfg-vk-feb7899-wowbox-route-v3-8c31f59a.tzst",
+      "sha256": "bda4ecddfd5af21f786d51a642ee0196c56879088725feff9407a88e33e865f8",
+      "sizeBytes": 750414,
+      "runtimeIdentifier": "lsfg-vk-android-feb7899-wowbox-route-v3-8c31f59a",
+      "tag": "v0.1.0",
+      "sourceRef": "GameNative/lsfg-vk-android feb7899a6d0f419e27bf47102b6df8ff17e50122 plus tools/lsfg-vk-android/wowbox-allowlist-fail-open.patch, tools/lsfg-vk-android/wowbox-route-isolation.patch and tools/lsfg-vk-android/wowbox-present-route-promotion.patch, built by scripts/build-lsfg-vk-android.sh with Android NDK 27.0.12077973.",
+      "status": "candidate",
+      "notes": "Public Linux/Android runtime component used by the standard WoW Box release."
+    },
+    {
+      "role": "input-bridge-stack",
+      "assetPath": "winhandler/winhandler-xinput-wow-filtered-arm64x-437d6859.tzst",
+      "filename": "winhandler-xinput-wow-filtered-arm64x-437d6859.tzst",
+      "sha256": "437d68591aace9cd599e7e2653abe0333fa7726df1d65d20fc2ffa33a2beff4d",
+      "sizeBytes": 31348,
+      "tag": "v0.1.0",
+      "sourceRef": "brunodev85/wine-9.2-custom a4ef2bf8963fe4bfab390eebf73336364ce209bc plus tools/wine-patches/winhandler-xinput-process-filter.patch, linked as a Wine ARM64X builtin by scripts/build-winhandler-xinput-filtered-arm64x.sh.",
+      "runtimeIdentifier": "proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff",
+      "status": "baseline",
+      "notes": "Public Linux/Android runtime component used by the standard WoW Box release."
+    },
+    {
+      "role": "base-imagefs",
+      "assetPath": "imagefs-wowbox-openfonts-afebea0a.txz",
+      "filename": "imagefs-wowbox-openfonts-afebea0a.txz",
+      "sha256": "afebea0a3fc6c592b0f2e54c3bd8f40227d7e6b63a0159205591708283bf6a15",
+      "tag": "v0.1.0",
+      "sourceRef": "Preserved Winlator Bionic imagefs used by the Odin adoption lane.; distribution uses open-source fonts only",
+      "status": "candidate",
+      "notes": "Public Linux/Android runtime component used by the standard WoW Box release.",
+      "sizeBytes": 182184248
+    },
+    {
+      "role": "graphics-wrapper-stack",
+      "assetPath": "graphics_driver/graphics-stack-frontmage-bionic-a93355a9.tzst",
+      "filename": "graphics-stack-frontmage-bionic-a93355a9.tzst",
+      "sha256": "a93355a91215d9a1a7d56538f2a3aa9258963a425a5eeec1188969b0333c9ef5",
+      "tag": "v0.1.0",
+      "sourceRef": "Verified GameNative Bionic Vulkan wrapper and helper stack.",
+      "status": "baseline",
+      "notes": "Public Linux/Android runtime component used by the standard WoW Box release.",
+      "sizeBytes": 35097968
+    },
+    {
+      "role": "wine-runtime",
+      "assetPath": "wine-runtime-wowbox-openfonts-9ac94fff.txz",
+      "filename": "wine-runtime-wowbox-openfonts-9ac94fff.txz",
+      "sha256": "9ac94fff85c5156e0179e1e11508b1cbb569d4f974bca8838df319327c6f291d",
+      "sizeBytes": 258510052,
+      "runtimeIdentifier": "proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff",
+      "tag": "v0.1.0",
+      "sourceRef": "GameNative Proton Wine Bionic base plus the reviewed DLLU Wine 47b268da ARM64X adaptations and Android ARM64EC ntdll live-view relocation commit 234e53a4543.",
+      "status": "baseline",
+      "notes": "Public Linux/Android runtime component used by the standard WoW Box release."
+    },
+    {
+      "role": "prefix-template",
+      "assetPath": "wine-prefix-wowbox-openfonts-350c6f28.tzst",
+      "filename": "wine-prefix-wowbox-openfonts-350c6f28.tzst",
+      "sha256": "350c6f287ef2008e62439a00f67affc0ef650a7ec2c2b7e8d0bea89e47c2f05a",
+      "sizeBytes": 34821337,
+      "runtimeIdentifier": "proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff",
+      "tag": "v0.1.0",
+      "sourceRef": "PrefixPack produced by the same build as Wine runtime cdbae0c8.; distribution uses open-source fonts only",
+      "status": "baseline",
+      "notes": "Public Linux/Android runtime component used by the standard WoW Box release."
+    },
+    {
+      "role": "cpu-emu-stack",
+      "assetPath": "fexcore/fexcore-2508-frontmage-bnet-99d69a-native-mock-jemalloc-5f1dbc8d.tzst",
+      "filename": "fexcore-2508-frontmage-bnet-99d69a-native-mock-jemalloc-5f1dbc8d.tzst",
+      "sha256": "5f1dbc8db81adcbcc25e1e4119b8bb16d4abbeb8d37b06a95249764e21edeae3",
+      "sizeBytes": 1588283,
+      "tag": "v0.1.0",
+      "sourceRef": "FEX 99d69a plus the scoped Agent native-system-view mock and FEX-pinned jemalloc 97d98699.",
+      "status": "candidate",
+      "notes": "Public Linux/Android runtime component used by the standard WoW Box release."
+    },
+    {
+      "role": "dx-wrapper-stack",
+      "assetPath": "dxwrapper/dxvk-2.7.1-vkd3d-3.1.0-wowclassic-f1d78e4d-amd64.tzst",
+      "filename": "dxvk-2.7.1-vkd3d-3.1.0-wowclassic-f1d78e4d-amd64.tzst",
+      "sha256": "3c527d5e357aa798a89e739f275bdade5485ac149133edb03357b89d853852ed",
+      "sizeBytes": 8749421,
+      "tag": "v0.1.0",
+      "sourceRef": "Official DXVK v2.7.1 paired with vkd3d-proton fixed commit f1d78e4d79e764afa8146a4333b569c9913e3258, built locally with MinGW-w64 GCC 13.2.0.",
+      "status": "baseline",
+      "notes": "Public Linux/Android runtime component used by the standard WoW Box release."
+    },
+    {
+      "role": "dx-wrapper-component",
+      "assetPath": "dxwrapper/vkd3d-3.1.0-wowclassic-f1d78e4d-amd64.tzst",
+      "filename": "vkd3d-3.1.0-wowclassic-f1d78e4d-amd64.tzst",
+      "sha256": "5862e875f79896acf2d4264efba656b1e7249dd3486e9efebe52b0b2b607fdd3",
+      "sizeBytes": 4097830,
+      "tag": "v0.1.0",
+      "sourceRef": "vkd3d-proton fixed commit f1d78e4d79e764afa8146a4333b569c9913e3258, built as AMD64/i386 release DLLs with MinGW-w64 GCC 13.2.0.",
+      "status": "baseline",
+      "notes": "Public Linux/Android runtime component used by the standard WoW Box release."
+    },
+    {
+      "role": "dx-wrapper-stack",
+      "assetPath": "dxwrapper/dxvk-2.7.1-official-amd64.tzst",
+      "filename": "dxvk-2.7.1-official-amd64.tzst",
+      "sha256": "b3400aff6cdeb8244c8926b9a287659492b86f7f9e3873b1017cdd1b10c92e88",
+      "tag": "v0.1.0",
+      "sourceRef": "Official DXVK v2.7.1 release archive d85ce7c79f57ecd765aaa1b9e7007cb875e6fde9f6d331df799bce73d513ce87.",
+      "status": "candidate",
+      "notes": "Public Linux/Android runtime component used by the standard WoW Box release.",
+      "sizeBytes": 9089513
+    },
+    {
+      "role": "dx-wrapper-stack",
+      "assetPath": "dxwrapper/dxvk-2.3.1.tzst",
+      "filename": "dxvk-2.3.1.tzst",
+      "sha256": "75678d86f3b150efc765e564df8a1f00036b6c64e5726145216778aec6a1be75",
+      "tag": "v0.1.0",
+      "sourceRef": "Existing Winlator DXVK 2.3.1 archive.",
+      "status": "candidate",
+      "notes": "Public Linux/Android runtime component used by the standard WoW Box release.",
+      "sizeBytes": 3899869
+    },
+    {
+      "role": "dx-wrapper-stack",
+      "assetPath": "dxwrapper/dxvk-2.7.1-arm64ec-83e503b4-a641.tzst",
+      "filename": "dxvk-2.7.1-arm64ec-83e503b4-a641.tzst",
+      "sha256": "9c082e8d186973bde4ae3a99805a11ef26b78d1d3f3013fae7ae0409f4e8d9a6",
+      "sizeBytes": 13257829,
+      "tag": "v0.1.0",
+      "sourceRef": "DXVK commit 83e503b4: verified COFF-ARM64EC system32 build plus matching i386 syswow64 build.",
+      "status": "candidate",
+      "notes": "Public Linux/Android runtime component used by the standard WoW Box release."
+    },
+    {
+      "role": "gpu-driver-stack",
+      "assetPath": "graphics_driver/adrenotools-turnip26.1.5-frontmage-ir3-nonstrict-ebad131-abc97b08.tzst",
+      "filename": "adrenotools-turnip26.1.5-frontmage-ir3-nonstrict-ebad131-abc97b08.tzst",
+      "sha256": "abc97b08fb3de2d54655e3493b34ff5a5a4f061878eeca88d657103581803c5a",
+      "sizeBytes": 2147343,
+      "tag": "v0.1.0",
+      "sourceRef": "Mesa ebad131 built on Bazzite 111 with NDK r27d/API 28 and the IR3 block-local dependency fix.",
+      "status": "candidate",
+      "notes": "Public Linux/Android runtime component used by the standard WoW Box release."
+    },
+    {
+      "role": "gpu-driver-stack",
+      "assetPath": "graphics_driver/adrenotools-turnip25.3.6-vanilla-armnative-5080c91b.tzst",
+      "filename": "adrenotools-turnip25.3.6-vanilla-armnative-5080c91b.tzst",
+      "sha256": "5080c91b38e0f9a022e5e515e59d9566ea206157635d95741164fefbcae0e8ab",
+      "sizeBytes": 2238126,
+      "tag": "v0.1.0",
+      "sourceRef": "Official Mesa 25.3.6 release, built on verified Ubuntu ARM64 host 113.",
+      "status": "experimental",
+      "notes": "Public Linux/Android runtime component used by the standard WoW Box release."
+    },
+    {
+      "role": "gpu-driver-stack",
+      "assetPath": "graphics_driver/adrenotools-turnip25.3.6-ir3-armnative-ce8ab1ea.tzst",
+      "filename": "adrenotools-turnip25.3.6-ir3-armnative-ce8ab1ea.tzst",
+      "sha256": "ce8ab1eacf0dbc88e7ddb0dfcde307cf72de77f8183a297aacf94e2cfa7d5bee",
+      "sizeBytes": 2237870,
+      "tag": "v0.1.0",
+      "sourceRef": "Official Mesa 25.3.6 plus the IR3 block-local dependency fix, built on verified Ubuntu ARM64 host 113.",
+      "status": "experimental",
+      "notes": "Public Linux/Android runtime component used by the standard WoW Box release."
+    }
+  ],
+  "profiles": {}
+}

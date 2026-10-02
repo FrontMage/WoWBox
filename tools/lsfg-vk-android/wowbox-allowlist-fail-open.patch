@@ -1,0 +1,438 @@
+diff --git a/framegen/src/core/device.cpp b/framegen/src/core/device.cpp
+index bf3d6b0..b323c3c 100644
+--- a/framegen/src/core/device.cpp
++++ b/framegen/src/core/device.cpp
+@@ -24,16 +24,14 @@
+ #define LSFG_FRAMEGEN_LOGW(...) do {} while (0)
+ #endif
+
+-// Build-fingerprint stamp. The string changes whenever this file is edited
+-// (via __DATE__/__TIME__), which forces NDK/CMake to detect a real source-level
+-// change rather than reusing the cached `lsfg-vk-framegen.a`. The variable is
+-// referenced from Device::Device so the linker can't dead-strip it; the value
+-// also lands in the runtime log so users/devs can confirm a fresh build is on
+-// the device by grepping for "framegen build stamp".
++// Reproducible source fingerprint. WoW Box verifies the immutable runtime by
++// hash, so wall-clock build timestamps must not change otherwise-identical
++// binaries.
+ namespace LSFG::Core {
+ extern const char* kFramegenBuildStamp;
+ const char* kFramegenBuildStamp =
+-    "framegen build stamp: " __DATE__ " " __TIME__;
++    "framegen source: feb7899a6d0f419e27bf47102b6df8ff17e50122 "
++    "wowbox-allowlist-fail-open-v1";
+ }
+
+ using namespace LSFG::Core;
+diff --git a/include/wowbox/application_filter.hpp b/include/wowbox/application_filter.hpp
+new file mode 100644
+index 0000000..7a92e7f
+--- /dev/null
++++ b/include/wowbox/application_filter.hpp
+@@ -0,0 +1,26 @@
++#pragma once
++
++#include <algorithm>
++#include <array>
++#include <cctype>
++#include <string>
++
++namespace WowBox {
++    inline std::string normalizeApplicationName(const char* rawName) {
++        if (!rawName) return {};
++        std::string name(rawName);
++        const size_t separator = name.find_last_of("/\\");
++        if (separator != std::string::npos) name = name.substr(separator + 1);
++        std::ranges::transform(name, name.begin(),
++            [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
++        return name;
++    }
++
++    inline bool isAllowedApplicationName(const std::string& name) {
++        static constexpr std::array<const char*, 3> allowed{
++            "wow.exe", "wowclassic.exe", "testd3d.exe"
++        };
++        return std::ranges::any_of(allowed,
++            [&name](const char* candidate) { return name == candidate; });
++    }
++}
+diff --git a/src/hooks.cpp b/src/hooks.cpp
+index bd1368e..614aba5 100644
+--- a/src/hooks.cpp
++++ b/src/hooks.cpp
+@@ -291,8 +291,10 @@ namespace {
+         } catch (const std::exception& e) {
+             Utils::logLimitN("swapPresent", 5,
+                 "An error occurred while presenting the swapchain:\n"
+-                "- " + std::string(e.what()));
+-            return VK_ERROR_INITIALIZATION_FAILED;
++                "- " + std::string(e.what()) +
++                "\nFrame generation has been disabled for this swapchain.");
++            swapchains.erase(*pPresentInfo->pSwapchains);
++            return Layer::ovkQueuePresentKHR(queue, pPresentInfo);
+         }
+         return res;
+     }
+diff --git a/src/layer.cpp b/src/layer.cpp
+index 1f5b41d..af22447 100644
+--- a/src/layer.cpp
++++ b/src/layer.cpp
+@@ -1,7 +1,10 @@
+ #include "layer.hpp"
+ #include "common/exception.hpp"
+ #include "config/config.hpp"
++#include "extract/extract.hpp"
+ #include "hooks.hpp"
++#include "utils/utils.hpp"
++#include "wowbox/application_filter.hpp"
+
+ #ifdef __ANDROID__
+ #include <android/hardware_buffer.h>
+@@ -12,10 +15,14 @@
+ #include <vulkan/vulkan_core.h>
+
+ #include <unordered_map>
++#include <cstdlib>
+ #include <exception>
++#include <fstream>
+ #include <iostream>
+ #include <cstdint>
++#include <mutex>
+ #include <string>
++#include <unistd.h>
+
+ namespace {
+     PFN_vkCreateInstance  next_vkCreateInstance{};
+@@ -82,6 +89,44 @@ namespace {
+         }
+         return true;
+     }
++
++    bool initializeAllowedApplication(const std::string& application) noexcept {
++        static std::mutex mutex;
++        static bool attempted{};
++        static bool ready{};
++        std::lock_guard<std::mutex> lock(mutex);
++        if (attempted) return ready;
++        attempted = true;
++
++        try {
++            // Only the explicitly allowed Windows application may override
++            // Mesa's present mode or read Lossless.dll.
++            unsetenv("MESA_VK_WSI_PRESENT_MODE"); // NOLINT
++            Extract::extractShaders();
++            ready = true;
++            std::cerr << "lsfg-vk: WoW Box application matched: "
++                      << application << '\n';
++            std::cerr << "lsfg-vk: Shaders extracted successfully.\n";
++
++            // Diagnostic metadata is best effort and must never terminate the
++            // game when TMPDIR is unavailable or read-only.
++            const char* tmpdir = getenv("TMPDIR");
++            const std::string latestPath = tmpdir
++                ? std::string(tmpdir) + "/lsfg-vk_last"
++                : "/tmp/lsfg-vk_last";
++            std::ofstream latest(latestPath, std::ios::trunc);
++            if (latest.is_open()) {
++                latest << "application: " << application << '\n';
++                latest << "pid: " << getpid() << '\n';
++            }
++        } catch (const std::exception& e) {
++            std::cerr << "lsfg-vk: WoW Box initialization failed; "
++                         "continuing without frame generation:\n";
++            std::cerr << "- " << e.what() << '\n';
++            ready = false;
++        }
++        return ready;
++    }
+ }
+
+ namespace {
+@@ -110,22 +155,50 @@ namespace {
+                 throw LSFG::vulkan_error(VK_ERROR_INITIALIZATION_FAILED,
+                     "Failed to get instance function pointer for vkCreateInstance");
+
+-            // NOLINTEND | skip initialization if the layer is disabled
++            // NOLINTEND | allow only the named Windows applications.  Wine's
++            // host process name is shared by Battle.net, CEF, Agent and WoW,
++            // while DXVK supplies the Windows executable through
++            // VkApplicationInfo.
++            if (Config::activeConf.enable) {
++                const char* rawApplication = pCreateInfo && pCreateInfo->pApplicationInfo
++                    ? pCreateInfo->pApplicationInfo->pApplicationName
++                    : nullptr;
++                const std::string application =
++                    WowBox::normalizeApplicationName(rawApplication);
++                if (!WowBox::isAllowedApplicationName(application)) {
++                    std::cerr << "lsfg-vk: Pass-through Vulkan application: "
++                              << (application.empty() ? "<unknown>" : application) << '\n';
++                    Config::activeConf.enable = false;
++                } else if (!initializeAllowedApplication(application)) {
++                    Config::activeConf.enable = false;
++                }
++            }
++
++            // skip initialization if the layer is disabled
+             if (!Config::activeConf.enable) {
+                 auto res = next_vkCreateInstance(pCreateInfo, pAllocator, pInstance);
+-                initInstanceFunc(*pInstance, "vkCreateDevice", &next_vkCreateDevice);
++                if (res == VK_SUCCESS)
++                    initInstanceFunc(*pInstance, "vkCreateDevice", &next_vkCreateDevice);
+                 return res;
+             }
+
+             // create instance
++            VkResult instanceResult{};
+             try {
+                 auto* createInstanceHook = reinterpret_cast<PFN_vkCreateInstance>(
+                     Hooks::hooks["vkCreateInstance"]);
+-                auto res = createInstanceHook(pCreateInfo, pAllocator, pInstance);
+-                if (res != VK_SUCCESS)
+-                    throw LSFG::vulkan_error(res, "Unknown error");
++                instanceResult = createInstanceHook(pCreateInfo, pAllocator, pInstance);
++                if (instanceResult != VK_SUCCESS)
++                    throw LSFG::vulkan_error(instanceResult, "Unknown error");
+             } catch (const std::exception& e) {
+-                throw LSFG::rethrowable_error("Failed to create Vulkan instance", e);
++                std::cerr << "lsfg-vk: Vulkan instance hook failed; "
++                             "retrying without frame generation:\n";
++                std::cerr << "- " << e.what() << '\n';
++                Config::activeConf.enable = false;
++                instanceResult = next_vkCreateInstance(pCreateInfo, pAllocator, pInstance);
++                if (instanceResult == VK_SUCCESS)
++                    initInstanceFunc(*pInstance, "vkCreateDevice", &next_vkCreateDevice);
++                return instanceResult;
+             }
+
+             // get relevant function pointers from the next layer
+@@ -142,14 +215,21 @@ namespace {
+                 "vkGetPhysicalDeviceProperties", &next_vkGetPhysicalDeviceProperties);
+             success &= initInstanceFunc(*pInstance,
+                 "vkGetPhysicalDeviceSurfaceCapabilitiesKHR", &next_vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
+-            if (!success)
+-                throw LSFG::vulkan_error(VK_ERROR_INITIALIZATION_FAILED,
+-                    "Failed to get instance function pointers");
++            if (!success) {
++                std::cerr << "lsfg-vk: Incomplete instance function table; "
++                             "continuing without frame generation.\n";
++                Config::activeConf.enable = false;
++                return VK_SUCCESS;
++            }
+
+             std::cerr << "lsfg-vk: Vulkan instance layer initialized successfully.\n";
+         } catch (const std::exception& e) {
+             std::cerr << "lsfg-vk: An error occurred while initializing the Vulkan instance layer:\n";
+             std::cerr << "- " << e.what() << '\n';
++            if (next_vkCreateInstance) {
++                Config::activeConf.enable = false;
++                return next_vkCreateInstance(pCreateInfo, pAllocator, pInstance);
++            }
+             return VK_ERROR_INITIALIZATION_FAILED;
+         }
+         return VK_SUCCESS;
+@@ -194,14 +274,19 @@ namespace {
+                 return next_vkCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice);
+
+             // create device
++            VkResult deviceResult{};
+             try {
+                 auto* createDeviceHook = reinterpret_cast<PFN_vkCreateDevice>(
+                     Hooks::hooks["vkCreateDevicePre"]);
+-                auto res = createDeviceHook(physicalDevice, pCreateInfo, pAllocator, pDevice);
+-                if (res != VK_SUCCESS)
+-                    throw LSFG::vulkan_error(res, "Unknown error");
++                deviceResult = createDeviceHook(physicalDevice, pCreateInfo, pAllocator, pDevice);
++                if (deviceResult != VK_SUCCESS)
++                    throw LSFG::vulkan_error(deviceResult, "Unknown error");
+             } catch (const std::exception& e) {
+-                throw LSFG::rethrowable_error("Failed to create Vulkan device", e);
++                std::cerr << "lsfg-vk: Vulkan device hook failed; "
++                             "retrying without frame generation:\n";
++                std::cerr << "- " << e.what() << '\n';
++                Config::activeConf.enable = false;
++                return next_vkCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice);
+             }
+
+             // get relevant function pointers from the next layer
+@@ -221,12 +306,20 @@ namespace {
+             success &= initDeviceFunc(*pDevice, "vkDestroyImage", &next_vkDestroyImage);
+             success &= initDeviceFunc(*pDevice, "vkGetImageMemoryRequirements", &next_vkGetImageMemoryRequirements);
+             success &= initDeviceFunc(*pDevice, "vkBindImageMemory", &next_vkBindImageMemory);
++#ifndef __ANDROID__
+             success &= initDeviceFunc(*pDevice, "vkGetMemoryFdKHR", &next_vkGetMemoryFdKHR);
++#else
++            initDeviceFunc(*pDevice, "vkGetMemoryFdKHR", &next_vkGetMemoryFdKHR);
++#endif
+             success &= initDeviceFunc(*pDevice, "vkAllocateMemory", &next_vkAllocateMemory);
+             success &= initDeviceFunc(*pDevice, "vkFreeMemory", &next_vkFreeMemory);
+             success &= initDeviceFunc(*pDevice, "vkCreateSemaphore", &next_vkCreateSemaphore);
+             success &= initDeviceFunc(*pDevice, "vkDestroySemaphore", &next_vkDestroySemaphore);
++#ifndef __ANDROID__
+             success &= initDeviceFunc(*pDevice, "vkGetSemaphoreFdKHR", &next_vkGetSemaphoreFdKHR);
++#else
++            initDeviceFunc(*pDevice, "vkGetSemaphoreFdKHR", &next_vkGetSemaphoreFdKHR);
++#endif
+ #ifdef __ANDROID__
+             // AHB function is optional — not all ICDs (e.g. Vortek wrapper) support it.
+             // If unavailable, the AHB image path will fail at point-of-use, but
+@@ -238,20 +331,31 @@ namespace {
+             success &= initDeviceFunc(*pDevice, "vkCmdPipelineBarrier", &next_vkCmdPipelineBarrier);
+             success &= initDeviceFunc(*pDevice, "vkCmdBlitImage", &next_vkCmdBlitImage);
+             success &= initDeviceFunc(*pDevice, "vkAcquireNextImageKHR", &next_vkAcquireNextImageKHR);
+-            if (!success)
+-                throw LSFG::vulkan_error(VK_ERROR_INITIALIZATION_FAILED,
+-                    "Failed to get device function pointers");
++            if (!success) {
++                std::cerr << "lsfg-vk: Incomplete device function table; "
++                             "continuing without frame generation.\n";
++                Config::activeConf.enable = false;
++                return VK_SUCCESS;
++            }
+
+             auto postCreateDeviceHook = reinterpret_cast<PFN_vkCreateDevice>(
+                 Hooks::hooks["vkCreateDevicePost"]);
+             auto res = postCreateDeviceHook(physicalDevice, pCreateInfo, pAllocator, pDevice);
+-            if (res != VK_SUCCESS)
+-                throw LSFG::vulkan_error(res, "Unknown error");
++            if (res != VK_SUCCESS) {
++                std::cerr << "lsfg-vk: Device bookkeeping failed; "
++                             "continuing without frame generation.\n";
++                Config::activeConf.enable = false;
++                return VK_SUCCESS;
++            }
+
+             std::cerr << "lsfg-vk: Vulkan device layer initialized successfully.\n";
+         } catch (const std::exception& e) {
+             std::cerr << "lsfg-vk: An error occurred while initializing the Vulkan device layer:\n";
+             std::cerr << "- " << e.what() << '\n';
++            if (next_vkCreateDevice) {
++                Config::activeConf.enable = false;
++                return next_vkCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice);
++            }
+             return VK_ERROR_INITIALIZATION_FAILED;
+         }
+         return VK_SUCCESS;
+diff --git a/src/main.cpp b/src/main.cpp
+index f653303..e20b73d 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -1,18 +1,9 @@
+ #include "config/config.hpp"
+-#include "extract/extract.hpp"
+-#include "utils/benchmark.hpp"
+ #include "utils/utils.hpp"
+
+-#include <unistd.h>
+-
+ #include <exception>
+-#include <fstream>
+-#include <stdexcept>
+ #include <iostream>
+-#include <cstdint>
+-#include <cstdlib>
+ #include <string>
+-#include <thread>
+
+ namespace {
+     __attribute__((constructor))
+@@ -39,92 +30,21 @@ namespace {
+             return; // default configuration will unload
+         }
+
+-        // exit silently if not enabled
+-        auto& conf = Config::activeConf;
+-        if (!conf.enable && name.second != "benchmark")
++        // The Wine host process name is not the Windows executable name.  Do
++        // not extract proprietary shaders or alter process environment here:
++        // layer_vkCreateInstance validates VkApplicationInfo against the WoW
++        // allow list and performs the remaining initialization lazily.
++        const auto& conf = Config::activeConf;
++        if (!conf.enable)
+             return; // default configuration will unload
+
+-        // print config
+-        std::cerr << "lsfg-vk: Loaded configuration for " << name.second << ":\n";
++        std::cerr << "lsfg-vk: Configuration armed for " << name.second
++                  << "; waiting for an allowed Vulkan application:\n";
+         if (!conf.dll.empty()) std::cerr << "  Using DLL from: " << conf.dll << '\n';
+         std::cerr << "  Multiplier: " << conf.multiplier << '\n';
+         std::cerr << "  Flow Scale: " << conf.flowScale << '\n';
+         std::cerr << "  Performance Mode: " << (conf.performance ? "Enabled" : "Disabled") << '\n';
+         std::cerr << "  HDR Mode: " << (conf.hdr ? "Enabled" : "Disabled") << '\n';
+         if (conf.e_present != 2) std::cerr << "  ! Present Mode: " << conf.e_present << '\n';
+-
+-        // remove mesa var in favor of config
+-        unsetenv("MESA_VK_WSI_PRESENT_MODE"); // NOLINT
+-
+-        // write latest file (use TMPDIR on Android if set)
+-        try {
+-            const char* tmpdir = getenv("TMPDIR");
+-            std::string latestPath = tmpdir ? std::string(tmpdir) + "/lsfg-vk_last" : "/tmp/lsfg-vk_last";
+-            std::ofstream latest(latestPath, std::ios::trunc);
+-            if (!latest.is_open())
+-                throw std::runtime_error("Failed to open " + latestPath + " for writing");
+-            latest << "exe: " << name.first << '\n';
+-            latest << "comm: " << name.second << '\n';
+-            latest << "pid: " << getpid() << '\n';
+-            if (!latest.good())
+-                throw std::runtime_error("Failed to write to " + latestPath);
+-        } catch (const std::exception& e) {
+-            std::cerr << "lsfg-vk: An error occurred while trying to write the latest file, exiting:\n";
+-            std::cerr << "- " << e.what() << '\n';
+-            exit(EXIT_FAILURE);
+-        }
+-
+-        // load shaders
+-        try {
+-            Extract::extractShaders();
+-        } catch (const std::exception& e) {
+-            std::cerr << "lsfg-vk: An error occurred while trying to extract the shaders, exiting:\n";
+-            std::cerr << "- " << e.what() << '\n';
+-            exit(EXIT_FAILURE);
+-        }
+-        std::cerr << "lsfg-vk: Shaders extracted successfully.\n";
+-
+-        // run benchmark if requested
+-        const char* benchmark_flag = std::getenv("LSFG_BENCHMARK");
+-        if (!benchmark_flag)
+-            return;
+-
+-        const std::string resolution(benchmark_flag);
+-        uint32_t width{};
+-        uint32_t height{};
+-        try {
+-            const size_t x = resolution.find('x');
+-            if (x == std::string::npos)
+-                throw std::runtime_error("Unable to find 'x' in benchmark string");
+-
+-            const std::string width_str = resolution.substr(0, x);
+-            const std::string height_str = resolution.substr(x + 1);
+-            if (width_str.empty() || height_str.empty())
+-                throw std::runtime_error("Invalid resolution");
+-
+-            const int32_t w = std::stoi(width_str);
+-            const int32_t h = std::stoi(height_str);
+-            if (w < 0 || h < 0)
+-                throw std::runtime_error("Resolution cannot be negative");
+-
+-            width = static_cast<uint32_t>(w);
+-            height = static_cast<uint32_t>(h);
+-        } catch (const std::exception& e) {
+-            std::cerr << "lsfg-vk: An error occurred while trying to parse the resolution, exiting:\n";
+-            std::cerr << "- " << e.what() << '\n';
+-            exit(EXIT_FAILURE);
+-        }
+-
+-        std::thread benchmark([width, height]() {
+-            try {
+-                Benchmark::run(width, height);
+-            } catch (const std::exception& e) {
+-                std::cerr << "lsfg-vk: An error occurred during the benchmark:\n";
+-                std::cerr << "- " << e.what() << '\n';
+-                exit(EXIT_FAILURE);
+-            }
+-        });
+-        benchmark.detach();
+-        conf.enable = false;
+     }
+ }

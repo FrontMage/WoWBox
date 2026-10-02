@@ -1,0 +1,38 @@
+{
+  "id": 4,
+  "name": "MapleStory 怀旧服 (Xbox)",
+  "cursorSpeed": 1.0,
+  "elements": [],
+  "controllers": [
+    {
+      "id": "ee6d26f8ce1cc60310155713f3660225d7d89557",
+      "name": "Xbox Wireless Controller",
+      "controllerBindings": [
+        {"keyCode": -1, "binding": "KEY_LEFT"},
+        {"keyCode": -2, "binding": "KEY_RIGHT"},
+        {"keyCode": -3, "binding": "KEY_DOWN"},
+        {"keyCode": -4, "binding": "KEY_UP"},
+        {"keyCode": -5, "binding": "MOUSE_MOVE_LEFT"},
+        {"keyCode": -6, "binding": "MOUSE_MOVE_RIGHT"},
+        {"keyCode": -7, "binding": "MOUSE_MOVE_DOWN"},
+        {"keyCode": -8, "binding": "MOUSE_MOVE_UP"},
+        {"keyCode": 96, "binding": "KEY_ALT_L"},
+        {"keyCode": 97, "binding": "KEY_Z"},
+        {"keyCode": 99, "binding": "KEY_CTRL_L"},
+        {"keyCode": 100, "binding": "MOUSE_LEFT_BUTTON"},
+        {"keyCode": 102, "binding": "KEY_5"},
+        {"keyCode": 103, "binding": "KEY_6"},
+        {"keyCode": 104, "binding": "KEY_7"},
+        {"keyCode": 105, "binding": "KEY_8"},
+        {"keyCode": 106, "binding": "MOUSE_RIGHT_BUTTON"},
+        {"keyCode": 107, "binding": "MOUSE_LEFT_BUTTON"},
+        {"keyCode": 108, "binding": "KEY_ENTER"},
+        {"keyCode": 109, "binding": "KEY_ESC"},
+        {"keyCode": 19, "binding": "KEY_1"},
+        {"keyCode": 22, "binding": "KEY_2"},
+        {"keyCode": 20, "binding": "KEY_3"},
+        {"keyCode": 21, "binding": "KEY_4"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,381 @@
+apply plugin: 'com.android.application'
+
+import groovy.json.JsonSlurper
+
+def uuProbeBuild = project.findProperty("uuProbe")?.toString()?.toBoolean() ?: false
+def agentDriveProbeBuild = project.findProperty("agentDriveProbe")?.toString()?.toBoolean() ?: false
+def minimalAssetsBuild =
+        project.findProperty("minimalAssets")?.toString()?.toBoolean() ?:
+        project.findProperty("minimalUuAssets")?.toString()?.toBoolean() ?:
+        false
+def configuredMinimalSpec = project.findProperty("minimalSpec")?.toString() ?: ''
+def minimalSpecPattern = ~/^box_spec(_[A-Za-z0-9][A-Za-z0-9._-]*)?\.json$/
+if (!configuredMinimalSpec.isEmpty() &&
+        (!(configuredMinimalSpec ==~ minimalSpecPattern) ||
+                configuredMinimalSpec.contains('..') ||
+                configuredMinimalSpec.contains('/') ||
+                configuredMinimalSpec.contains('\\'))) {
+    throw new GradleException("minimalSpec must be a safe box_spec*.json asset basename")
+}
+if (!configuredMinimalSpec.isEmpty() && !minimalAssetsBuild) {
+    throw new GradleException("minimalSpec requires -PminimalAssets=true")
+}
+def selectedMinimalSpec = configuredMinimalSpec ?: (uuProbeBuild
+        ? 'box_spec_odin_uu_eflags_inline.json'
+        : 'box_spec_odin_standard_lock_witness.json')
+
+def minimalAssetExcludes = [] as Set
+def minimalAssetsDir = layout.buildDirectory.dir('generated/minimalAssets').get().asFile
+if (minimalAssetsBuild) {
+    def assetsRoot = file('src/main/assets')
+    def bundledSpecName = selectedMinimalSpec
+    def bundledSpecFile = new File(assetsRoot, bundledSpecName)
+    if (!bundledSpecFile.isFile()) {
+        throw new GradleException("Missing minimal Box spec: ${bundledSpecFile}")
+    }
+
+    def spec = new JsonSlurper().parse(bundledSpecFile)
+    def keep = [bundledSpecName] as Set
+    def assetChecksums = [:]
+    def sha256File = { File input ->
+        def digest = java.security.MessageDigest.getInstance('SHA-256')
+        input.withInputStream { stream ->
+            byte[] buffer = new byte[1024 * 1024]
+            int count
+            while ((count = stream.read(buffer)) != -1) digest.update(buffer, 0, count)
+        }
+        digest.digest().collect { String.format('%02x', it & 0xff) }.join()
+    }
+    def normalizeChecksum = { checksum, label ->
+        def value = checksum?.toString()?.toLowerCase(Locale.US) ?: ''
+        if (!(value ==~ /[0-9a-f]{64}/)) {
+            throw new GradleException("${label} must be a SHA-256 checksum")
+        }
+        value
+    }
+    def addAssetSource = { source, checksum, label ->
+        def value = source?.toString()
+        if (!value?.startsWith('asset://')) {
+            throw new GradleException("${label} must use an asset:// source")
+        }
+        def relative = value.substring('asset://'.length())
+        def components = relative.split('/', -1)
+        if (relative.isEmpty() ||
+                relative.startsWith('/') ||
+                relative.contains('\\') ||
+                components.any {
+                    it.isEmpty() ||
+                            it == '.' ||
+                            it == '..' ||
+                            it.contains('..') ||
+                            !(it ==~ /[A-Za-z0-9][A-Za-z0-9._+-]*/)
+                }) {
+            throw new GradleException("Unsafe minimal asset source: ${value}")
+        }
+        def expected = normalizeChecksum(checksum, "${label} checksum")
+        def existing = assetChecksums[relative]
+        if (existing != null && existing != expected) {
+            throw new GradleException("Conflicting checksums for minimal asset ${relative}")
+        }
+        assetChecksums[relative] = expected
+        keep.add(relative)
+        relative
+    }
+
+    if (!(spec.layers instanceof List) || spec.layers.isEmpty()) {
+        throw new GradleException("Minimal Box spec must contain layers")
+    }
+    def seenLayerTypes = [] as Set
+    def prefixLayers = []
+    def wineLayers = []
+    def inputBridgeLayers = []
+    spec.layers.each { layer ->
+        def layerType = layer.type?.toString() ?: ''
+        if (!(layerType ==~ /[a-z][a-z0-9-]*/) || !seenLayerTypes.add(layerType)) {
+            throw new GradleException("Unsafe or duplicate minimal layer type: ${layerType}")
+        }
+        if (layerType == 'prefix-template') prefixLayers.add(layer)
+        if (layerType == 'wine-runtime') wineLayers.add(layer)
+        if (layerType == 'input-bridge-stack') inputBridgeLayers.add(layer)
+        addAssetSource(layer.source, layer.checksum, "layer ${layerType}")
+
+        def hasDeltaSource = layer.winePrefixDeltaManifest != null &&
+                !layer.winePrefixDeltaManifest.toString().isEmpty()
+        def hasDeltaChecksum = layer.winePrefixDeltaChecksum != null &&
+                !layer.winePrefixDeltaChecksum.toString().isEmpty()
+        if (hasDeltaSource != hasDeltaChecksum) {
+            throw new GradleException(
+                    "Layer ${layerType} must specify Wine prefix delta source and checksum together")
+        }
+        if (hasDeltaSource) {
+            if (layerType != 'prefix-template') {
+                throw new GradleException("Wine prefix delta is only valid on prefix-template")
+            }
+            def deltaRelative = addAssetSource(
+                    layer.winePrefixDeltaManifest,
+                    layer.winePrefixDeltaChecksum,
+                    'Wine prefix delta manifest')
+            if (!deltaRelative.startsWith('wine_prefix_delta/')) {
+                throw new GradleException("Unsafe Wine prefix delta asset: ${deltaRelative}")
+            }
+        }
+    }
+    if (prefixLayers.size() != 1 || wineLayers.size() != 1 ||
+            inputBridgeLayers.size() != 1 ||
+            !wineLayers[0].runtimeIdentifier?.toString() ||
+            prefixLayers[0].runtimeIdentifier?.toString() !=
+                    wineLayers[0].runtimeIdentifier?.toString() ||
+            inputBridgeLayers[0].runtimeIdentifier?.toString() !=
+                    wineLayers[0].runtimeIdentifier?.toString()) {
+        throw new GradleException(
+                "Minimal prefix-template and input-bridge-stack runtimeIdentifier must match their single wine-runtime")
+    }
+
+    def selectedDxvkMatches = spec.graphics?.dxvkCandidates?.findAll {
+        it.version?.toString() == spec.graphics?.dxvkVersion?.toString()
+    } ?: []
+    if (selectedDxvkMatches.size() != 1) {
+        throw new GradleException("Minimal spec must select exactly one DXVK candidate")
+    }
+    def selectedDxvk = selectedDxvkMatches[0]
+    addAssetSource(selectedDxvk.source, selectedDxvk.checksum, 'selected DXVK')
+
+    def selectedTurnipMatches = spec.graphics?.turnipCandidates?.findAll {
+        it.version?.toString() == spec.graphics?.turnipVersion?.toString()
+    } ?: []
+    if (selectedTurnipMatches.size() != 1) {
+        throw new GradleException("Minimal spec must select exactly one Turnip candidate")
+    }
+    def selectedTurnip = selectedTurnipMatches[0]
+    addAssetSource(selectedTurnip.source, selectedTurnip.checksum, 'selected Turnip')
+
+    def defaultsSource = file('src/main/java/com/winlator/core/DefaultVersion.java').getText('UTF-8')
+    def readDefaultVersion = { name ->
+        def matcher = defaultsSource =~ /public static final String ${name} = "([^"]+)";/
+        if (!matcher.find()) throw new GradleException("Could not resolve DefaultVersion.${name}")
+        matcher.group(1)
+    }
+    keep.add("dxwrapper/d8vk-${readDefaultVersion('D8VK')}.tzst".toString())
+    keep.add("dxwrapper/vkd3d-${readDefaultVersion('VKD3D')}.tzst".toString())
+
+    assetsRoot.eachFileRecurse { asset ->
+        if (!asset.isFile()) return
+        def relative = assetsRoot.toPath().relativize(asset.toPath()).toString().replace(File.separatorChar, '/' as char)
+        def optionalCandidate =
+                relative == 'managed_assets.json' ||
+                relative.startsWith('box_spec') && relative.endsWith('.json') ||
+                relative.startsWith('preinstall/') ||
+                relative.startsWith('proton-') ||
+                relative.startsWith('fexcore/') ||
+                relative.startsWith('wine_prefix_delta/') ||
+                relative.startsWith('frame_generation/') ||
+                relative.startsWith('dxwrapper/') ||
+                relative.startsWith('graphics_driver/') && relative.endsWith('.tzst') ||
+                relative.startsWith('wowbox64/') ||
+                relative.startsWith('winhandler/ime-contract-probe-') ||
+                relative.startsWith('imagefs') && relative.endsWith('.txz')
+        if (optionalCandidate && !keep.contains(relative)) minimalAssetExcludes.add(relative)
+    }
+
+    def missing = keep.findAll { !new File(assetsRoot, it).isFile() }
+    if (!missing.isEmpty()) {
+        throw new GradleException("Minimal asset closure has missing files: ${missing.sort()}")
+    }
+    assetChecksums.each { relative, expected ->
+        def asset = new File(assetsRoot, relative)
+        def actual = sha256File(asset)
+        if (actual != expected) {
+            throw new GradleException(
+                    "Minimal asset checksum mismatch for ${relative}: expected=${expected}, actual=${actual}")
+        }
+    }
+    prefixLayers.each { layer ->
+        if (layer.winePrefixDeltaManifest == null ||
+                layer.winePrefixDeltaManifest.toString().isEmpty()) return
+        def relative = layer.winePrefixDeltaManifest.toString()
+                .substring('asset://'.length())
+        def manifest = new JsonSlurper().parse(new File(assetsRoot, relative))
+        if (manifest.schemaVersion != 1 ||
+                manifest.runtimeIdentifier?.toString() !=
+                        layer.runtimeIdentifier?.toString() ||
+                !(manifest.entries instanceof List) ||
+                manifest.entries.isEmpty()) {
+            throw new GradleException(
+                    "Wine prefix delta manifest contract mismatch: ${relative}")
+        }
+        def seenPrefixPaths = [] as Set
+        manifest.entries.eachWithIndex { entry, index ->
+            def prefixPath = entry.prefixPath?.toString() ?: ''
+            def runtimePath = entry.runtimePath?.toString() ?: ''
+            def basename = new File(prefixPath).name.toLowerCase(Locale.US)
+            def managedElsewhere = basename == 'dxgi.dll' ||
+                    basename.startsWith('d3d') && basename.endsWith('.dll') ||
+                    basename.startsWith('xinput') && basename.endsWith('.dll')
+            def architectureMatches =
+                    runtimePath.startsWith('lib/wine/aarch64-windows/') ?
+                            (prefixPath.startsWith('system32/') ||
+                                    prefixPath.startsWith('sysarm32/')) :
+                    runtimePath.startsWith('lib/wine/x86_64-windows/') ?
+                            prefixPath.startsWith('system32/') :
+                    runtimePath.startsWith('lib/wine/i386-windows/') &&
+                            prefixPath.startsWith('syswow64/')
+            if (!prefixPath ||
+                    !runtimePath ||
+                    !seenPrefixPaths.add(prefixPath.toLowerCase(Locale.US)) ||
+                    !(prefixPath.startsWith('system32/') ||
+                            prefixPath.startsWith('sysarm32/') ||
+                            prefixPath.startsWith('syswow64/')) ||
+                    !(runtimePath.startsWith('lib/wine/aarch64-windows/') ||
+                            runtimePath.startsWith('lib/wine/x86_64-windows/') ||
+                            runtimePath.startsWith('lib/wine/i386-windows/')) ||
+                    basename !=
+                            new File(runtimePath).name.toLowerCase(Locale.US) ||
+                    managedElsewhere ||
+                    !architectureMatches ||
+                    normalizeChecksum(
+                            entry.baselineSha256,
+                            "delta entry ${index} baselineSha256") ==
+                            normalizeChecksum(
+                                    entry.candidateSha256,
+                                    "delta entry ${index} candidateSha256")) {
+                throw new GradleException(
+                        "Invalid Wine prefix delta entry ${index}: ${relative}")
+            }
+        }
+    }
+    def lane = uuProbeBuild ? "uu-probe" : "standard"
+    println("[minimal-assets:${lane}] keeping ${keep.size()} selected candidate assets; excluding ${minimalAssetExcludes.size()} alternatives")
+    keep.sort().each { println("[minimal-assets:${lane}] keep ${it}") }
+}
+
+def prepareMinimalAssets = tasks.register('prepareMinimalAssets', Sync) {
+    onlyIf { minimalAssetsBuild }
+    from(file('src/main/assets')) {
+        exclude(minimalAssetExcludes)
+    }
+    into(minimalAssetsDir)
+}
+
+configurations {
+    jschSourceArchive
+}
+
+def jschSourceDir = layout.buildDirectory.dir('generated/jsch/src')
+def jschClassesDir = layout.buildDirectory.dir('generated/jsch/classes')
+
+def extractJschAndroidSource = tasks.register('extractJschAndroidSource', Sync) {
+    from({
+        configurations.jschSourceArchive.collect { zipTree(it) }
+    })
+    into(jschSourceDir)
+    include 'com/**/*.java'
+    exclude 'META-INF/**'
+    exclude 'com/jcraft/jsch/bc/**'
+    exclude 'com/jcraft/jsch/PageantConnector.java'
+    exclude 'com/jcraft/jsch/JUnixSocketFactory.java'
+    exclude 'com/jcraft/jsch/SSHAgentConnector.java'
+    exclude 'com/jcraft/jsch/Log4j2Logger.java'
+    exclude 'com/jcraft/jsch/Slf4jLogger.java'
+}
+
+def compileJschAndroidSource = tasks.register('compileJschAndroidSource', JavaCompile) {
+    dependsOn extractJschAndroidSource
+    source = fileTree(jschSourceDir) {
+        include '**/*.java'
+    }
+    classpath = files()
+    destinationDirectory = jschClassesDir
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+    options.compilerArgs += ['-g:none']
+}
+
+def prepareJschAndroidJar = tasks.register('prepareJschAndroidJar', Jar) {
+    dependsOn compileJschAndroidSource
+    archiveFileName = 'jsch-2.28.0-android.jar'
+    destinationDirectory = layout.buildDirectory.dir('generated/jsch')
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(jschClassesDir)
+    from({
+        configurations.jschSourceArchive.collect { zipTree(it) }
+    }) {
+        include 'META-INF/LICENSE*.txt'
+    }
+}
+
+if (agentDriveProbeBuild && !uuProbeBuild) {
+    throw new GradleException("agentDriveProbe requires -PuuProbe=true")
+}
+
+android {
+    compileSdk 30
+
+    defaultConfig {
+        applicationId uuProbeBuild ? 'com.blizzard.diablo.immortal' : 'com.winlator.llm'
+        minSdkVersion 26
+        targetSdkVersion 28
+        versionCode 17
+        versionName "0.1.0"
+        buildConfigField 'boolean', 'UU_PROBE_BUILD', uuProbeBuild.toString()
+        buildConfigField 'boolean', 'AGENT_DRIVE_PROBE_BUILD', agentDriveProbeBuild.toString()
+        buildConfigField 'boolean', 'MINIMAL_ASSETS_BUILD', minimalAssetsBuild.toString()
+        buildConfigField 'String', 'MINIMAL_SPEC_ASSET', "\"${minimalAssetsBuild ? selectedMinimalSpec : ''}\""
+        manifestPlaceholders = [
+                appLabel: uuProbeBuild ? 'WoW Box (UU Probe)' : 'WoW Box',
+                uuProbeEnabled: uuProbeBuild.toString()
+        ]
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+
+            ndk {
+                // Ludashi/vanilla-aligned native stack (adrenotools, etc.) is arm64-only.
+                abiFilters 'arm64-v8a'
+            }
+        }
+    }
+
+    aaptOptions {
+        noCompress "txz", "tzst", "xz", "zst"
+    }
+
+    lintOptions {
+        checkReleaseBuilds false
+    }
+
+    ndkVersion '22.1.7171670'
+
+    externalNativeBuild {
+        cmake {
+            version '3.22.1'
+            path 'src/main/cpp/CMakeLists.txt'
+        }
+    }
+
+    if (minimalAssetsBuild) {
+        sourceSets.getByName("main").assets.setSrcDirs([minimalAssetsDir])
+    }
+}
+
+afterEvaluate {
+    if (minimalAssetsBuild) {
+        tasks.named('preBuild').configure {
+            dependsOn(prepareMinimalAssets)
+        }
+    }
+}
+
+dependencies {
+    jschSourceArchive 'com.github.mwiede:jsch:2.28.0:sources'
+    implementation 'androidx.appcompat:appcompat:1.2.0'
+    implementation 'androidx.preference:preference:1.1.1'
+    implementation 'com.google.android.material:material:1.4.0'
+    implementation files(prepareJschAndroidJar)
+    implementation 'com.github.luben:zstd-jni:1.5.2-3@aar'
+    implementation 'org.tukaani:xz:1.7'
+    implementation 'org.apache.commons:commons-compress:1.20'
+    testImplementation 'junit:junit:4.13.2'
+}

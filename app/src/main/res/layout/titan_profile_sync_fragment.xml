@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/titan_profile_sync_description"
+            android:textSize="14sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/titan_profile_sync_host"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/ETTitanSyncHost"
+            style="@style/EditText"
+            android:layout_marginTop="4dp"
+            android:hint="@string/titan_profile_sync_host_hint"
+            android:inputType="textUri" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/titan_profile_sync_username"
+                    android:textStyle="bold" />
+
+                <EditText
+                    android:id="@+id/ETTitanSyncUsername"
+                    style="@style/EditText"
+                    android:layout_marginTop="4dp"
+                    android:inputType="text" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="100dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/titan_profile_sync_port"
+                    android:textStyle="bold" />
+
+                <EditText
+                    android:id="@+id/ETTitanSyncPort"
+                    style="@style/EditText"
+                    android:layout_marginTop="4dp"
+                    android:inputType="number" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/titan_profile_sync_password"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/ETTitanSyncPassword"
+            style="@style/EditText"
+            android:layout_marginTop="4dp"
+            android:autofillHints="password"
+            android:inputType="textPassword" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/titan_profile_sync_source"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/ETTitanSyncSourcePath"
+            style="@style/EditText"
+            android:layout_marginTop="4dp"
+            android:inputType="text" />
+
+        <TextView
+            android:id="@+id/TVTitanSyncTrust"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textIsSelectable="true"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/BTTitanSyncForgetHost"
+            style="@style/ButtonNeutral"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/titan_profile_sync_forget_host" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/BTTitanSyncTest"
+                style="@style/ButtonNeutral"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/titan_profile_sync_test" />
+
+            <Button
+                android:id="@+id/BTTitanSyncStart"
+                style="@style/ButtonPositive"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="@string/titan_profile_sync_start" />
+        </LinearLayout>
+
+        <ProgressBar
+            android:id="@+id/PBTitanSync"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:max="100"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/TVTitanSyncStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textIsSelectable="true" />
+
+        <Button
+            android:id="@+id/BTTitanSyncCancel"
+            style="@style/ButtonNeutral"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:layout_marginTop="8dp"
+            android:text="@string/cancel"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/TVTitanSyncLast"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textIsSelectable="true"
+            android:textSize="12sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/titan_profile_sync_warning"
+            android:textColor="#d07030"
+            android:textSize="12sp" />
+    </LinearLayout>
+</ScrollView>

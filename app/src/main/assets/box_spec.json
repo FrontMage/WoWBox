@@ -1,0 +1,284 @@
+{
+  "schemaVersion": 2,
+  "boxId": "frontmage-bnet-arm64",
+  "displayName": "WoW Box",
+  "layers": [
+    {
+      "type": "base-imagefs",
+      "source": "asset://imagefs-wowbox-openfonts-afebea0a.txz",
+      "runtimeIdentifier": "",
+      "archive": "txz",
+      "checksum": "afebea0a3fc6c592b0f2e54c3bd8f40227d7e6b63a0159205591708283bf6a15",
+      "target": "/",
+      "replacePolicy": "replace"
+    },
+    {
+      "type": "graphics-wrapper-stack",
+      "source": "asset://graphics_driver/graphics-stack-frontmage-bionic-a93355a9.tzst",
+      "archive": "tzst",
+      "checksum": "a93355a91215d9a1a7d56538f2a3aa9258963a425a5eeec1188969b0333c9ef5",
+      "target": "/",
+      "replacePolicy": "preserve",
+      "capabilities": [
+        "bionic-cxx-runtime"
+      ]
+    },
+    {
+      "type": "frame-generation-stack",
+      "source": "asset://frame_generation/lsfg-vk-feb7899-wowbox-route-v3-8c31f59a.tzst",
+      "runtimeIdentifier": "lsfg-vk-android-feb7899-wowbox-route-v3-8c31f59a",
+      "archive": "tzst",
+      "checksum": "bda4ecddfd5af21f786d51a642ee0196c56879088725feff9407a88e33e865f8",
+      "target": "/",
+      "replacePolicy": "replace",
+      "capabilities": [
+        "android-ahardwarebuffer",
+        "wow-process-filtered",
+        "engine-route-filtered",
+        "per-instance-device-dispatch",
+        "lazy-present-route-selection",
+        "initial-swapchain-pass-through",
+        "staged-swapchain-promotion",
+        "fail-open-present"
+      ]
+    },
+    {
+      "type": "prefix-template",
+      "source": "asset://wine-prefix-wowbox-openfonts-350c6f28.tzst",
+      "runtimeIdentifier": "proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff",
+      "archive": "tzst",
+      "checksum": "350c6f287ef2008e62439a00f67affc0ef650a7ec2c2b7e8d0bea89e47c2f05a",
+      "target": "/home/xuser-box",
+      "replacePolicy": "preserve"
+    },
+    {
+      "type": "wine-runtime",
+      "source": "asset://wine-runtime-wowbox-openfonts-9ac94fff.txz",
+      "runtimeIdentifier": "proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff",
+      "archive": "txz",
+      "checksum": "9ac94fff85c5156e0179e1e11508b1cbb569d4f974bca8838df319327c6f291d",
+      "target": "/opt/proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff",
+      "replacePolicy": "preserve"
+    },
+    {
+      "type": "input-bridge-stack",
+      "source": "asset://winhandler/winhandler-xinput-wow-filtered-arm64x-437d6859.tzst",
+      "runtimeIdentifier": "proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff",
+      "archive": "tzst",
+      "checksum": "437d68591aace9cd599e7e2653abe0333fa7726df1d65d20fc2ffa33a2beff4d",
+      "target": "/home/xuser-box/.wine/drive_c/windows/system32",
+      "replacePolicy": "replace",
+      "capabilities": [
+        "winhandler-xinput",
+        "wine-builtin-arm64x",
+        "wow-process-filtered"
+      ]
+    },
+    {
+      "type": "dx-wrapper-stack",
+      "source": "asset://dxwrapper/dxvk-2.7.1-vkd3d-3.1.0-wowclassic-f1d78e4d-amd64.tzst",
+      "archive": "tzst",
+      "checksum": "3c527d5e357aa798a89e739f275bdade5485ac149133edb03357b89d853852ed",
+      "target": "/home/xuser-box/.wine/drive_c/windows",
+      "replacePolicy": "replace"
+    },
+    {
+      "type": "gpu-driver-stack",
+      "source": "asset://graphics_driver/adrenotools-turnip26.1.5-frontmage-ir3-nonstrict-ebad131-abc97b08.tzst",
+      "archive": "tzst",
+      "checksum": "abc97b08fb3de2d54655e3493b34ff5a5a4f061878eeca88d657103581803c5a",
+      "target": "turnip26.1.5-frontmage-ir3-nonstrict-ebad131-abc97b08",
+      "replacePolicy": "preserve"
+    },
+    {
+      "type": "cpu-emu-stack",
+      "source": "asset://fexcore/fexcore-2508-frontmage-bnet-99d69a-native-mock-jemalloc-5f1dbc8d.tzst",
+      "archive": "tzst",
+      "checksum": "5f1dbc8db81adcbcc25e1e4119b8bb16d4abbeb8d37b06a95249764e21edeae3",
+      "target": "/",
+      "replacePolicy": "preserve"
+    }
+  ],
+  "payload": {
+    "source": "file:///storage/emulated/0/Download/FrontMage-BNet",
+    "kind": "directory",
+    "mountDrive": "D",
+    "extractDir": "/storage/emulated/0/Download/FrontMage-BNet"
+  },
+  "extraMounts": [],
+  "graphics": {
+    "dxvkVersion": "2.7.1-official-amd64",
+    "turnipVersion": "26.1.5-frontmage-ir3-nonstrict",
+    "vkd3dEnabled": true,
+    "dxvkCandidates": [
+      {
+        "version": "2.7.1-official-amd64",
+        "source": "asset://dxwrapper/dxvk-2.7.1-official-amd64.tzst",
+        "checksum": "b3400aff6cdeb8244c8926b9a287659492b86f7f9e3873b1017cdd1b10c92e88",
+        "system32Machine": "amd64"
+      },
+      {
+        "version": "2.7.1-arm64ec-83e503b4-a641",
+        "source": "asset://dxwrapper/dxvk-2.7.1-arm64ec-83e503b4-a641.tzst",
+        "checksum": "9c082e8d186973bde4ae3a99805a11ef26b78d1d3f3013fae7ae0409f4e8d9a6",
+        "system32Machine": "arm64ec"
+      },
+      {
+        "version": "2.3.1",
+        "source": "asset://dxwrapper/dxvk-2.3.1.tzst",
+        "checksum": "75678d86f3b150efc765e564df8a1f00036b6c64e5726145216778aec6a1be75",
+        "system32Machine": "amd64"
+      }
+    ],
+    "turnipCandidates": [
+      {
+        "version": "26.1.5-frontmage-ir3-nonstrict",
+        "source": "asset://graphics_driver/adrenotools-turnip26.1.5-frontmage-ir3-nonstrict-ebad131-abc97b08.tzst",
+        "checksum": "abc97b08fb3de2d54655e3493b34ff5a5a4f061878eeca88d657103581803c5a",
+        "driverId": "turnip26.1.5-frontmage-ir3-nonstrict-ebad131-abc97b08"
+      },
+      {
+        "version": "25.3.6-vanilla-armnative",
+        "source": "asset://graphics_driver/adrenotools-turnip25.3.6-vanilla-armnative-5080c91b.tzst",
+        "checksum": "5080c91b38e0f9a022e5e515e59d9566ea206157635d95741164fefbcae0e8ab",
+        "driverId": "turnip25.3.6-vanilla-armnative-5080c91b"
+      },
+      {
+        "version": "25.3.6-ir3-armnative",
+        "source": "asset://graphics_driver/adrenotools-turnip25.3.6-ir3-armnative-ce8ab1ea.tzst",
+        "checksum": "ce8ab1eacf0dbc88e7ddb0dfcde307cf72de77f8183a297aacf94e2cfa7d5bee",
+        "driverId": "turnip25.3.6-ir3-armnative-ce8ab1ea"
+      }
+    ]
+  },
+  "launch": {
+    "discoveryRoots": [
+      "D:\\"
+    ],
+    "desktopButtonEnabled": false,
+    "defaultTargetId": "bnet",
+    "targets": [
+      {
+        "id": "testd3d",
+        "label": "TestD3D",
+        "kind": "executable",
+        "guestPath": "D:\\TestD3D.exe",
+        "workingDirectory": "D:\\",
+        "args": [],
+        "requiresExists": true,
+        "hidden": true
+      },
+      {
+        "id": "bnet-installer",
+        "label": "Install Battle.net",
+        "kind": "installer",
+        "guestPath": "D:\\Battle.net-Setup.exe",
+        "workingDirectory": "D:\\",
+        "args": [],
+        "requiresExists": true,
+        "hidden": false,
+        "hiddenWhenTargetIdExists": "bnet"
+      },
+      {
+        "id": "bnet",
+        "label": "Battle.net",
+        "kind": "executable",
+        "guestPath": "C:\\Program Files (x86)\\Battle.net\\Battle.net Launcher.exe",
+        "workingDirectory": "C:\\Program Files (x86)\\Battle.net",
+        "args": [],
+        "requiresExists": true,
+        "hidden": false
+      },
+      {
+        "id": "probe-normal",
+        "label": "Platform probe (normal)",
+        "kind": "executable",
+        "guestPath": "D:\\bnet-platform-probe.exe",
+        "workingDirectory": "D:\\",
+        "args": [],
+        "requiresExists": true,
+        "hidden": true
+      },
+      {
+        "id": "probe-agent",
+        "label": "Platform probe (Agent.exe)",
+        "kind": "executable",
+        "guestPath": "D:\\Agent.exe",
+        "workingDirectory": "D:\\",
+        "args": [],
+        "requiresExists": true,
+        "hidden": true
+      },
+      {
+        "id": "probe-agenthelper",
+        "label": "Platform probe (AgentHelper.exe)",
+        "kind": "executable",
+        "guestPath": "D:\\AgentHelper.exe",
+        "workingDirectory": "D:\\",
+        "args": [],
+        "requiresExists": true,
+        "hidden": true
+      },
+      {
+        "id": "wic-register",
+        "label": "Register 32-bit WIC",
+        "kind": "executable",
+        "guestPath": "C:\\windows\\syswow64\\regsvr32.exe",
+        "workingDirectory": "C:\\windows\\syswow64",
+        "args": [
+          "/s",
+          "C:\\windows\\syswow64\\windowscodecs.dll"
+        ],
+        "requiresExists": true,
+        "hidden": true
+      },
+      {
+        "id": "probe-ntdll-fileview",
+        "label": "NtReadFile file-view relocation probe",
+        "kind": "executable",
+        "guestPath": "D:\\probe_ntdll_fileview_thunk_bridge.exe",
+        "workingDirectory": "D:\\",
+        "args": [],
+        "requiresExists": true,
+        "hidden": true
+      },
+      {
+        "id": "wineboot-update",
+        "label": "Reconcile prefix with current Wine",
+        "kind": "executable",
+        "guestPath": "C:\\windows\\system32\\wineboot.exe",
+        "workingDirectory": "C:\\windows\\system32",
+        "args": [
+          "-u"
+        ],
+        "requiresExists": true,
+        "hidden": true
+      }
+    ]
+  },
+  "env": {
+    "base": {
+      "WINEESYNC": "0",
+      "WINEFSYNC": "0",
+      "WINEDLLOVERRIDES": "xinput1_3=n,b;xinput1_4=n,b;windows.gaming.input=d",
+      "SDL_JOYSTICK_RAWINPUT": "0",
+      "FEX_BNET_FORCE_X86": "1",
+      "FEX_BNET_DETECT_LOG": "0",
+      "FEX_EXTENDEDVOLATILEMETADATA": "D2R.exe;0xd159f0-0xd15dac",
+      "FEX_SILENTLOG": "1",
+      "FEX_OUTPUTLOG": "stderr",
+      "DXVK_LOG_LEVEL": "info",
+      "DXVK_HUD": "fps,devinfo",
+      "TU_DEBUG": "nolrz",
+      "DISABLE_BCN_COMPUTE": "1",
+      "BCN_COMPUTE_AUTO": "1"
+    },
+    "fexPreset": "intermediate",
+    "overrides": {}
+  },
+  "debugServer": {
+    "enabled": true,
+    "bind": "0.0.0.0",
+    "port": 39090
+  }
+}

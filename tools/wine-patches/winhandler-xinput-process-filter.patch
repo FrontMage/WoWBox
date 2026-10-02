@@ -1,0 +1,154 @@
+diff --git a/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
+index 01b2290..3d66511 100755
+--- a/dlls/xinput1_3/main.c
++++ b/dlls/xinput1_3/main.c
+@@ -98,11 +98,51 @@ static struct xinput_controller controller =
+
+ static HANDLE start_event;
+ static BOOL thread_running = FALSE;
++static INIT_ONCE bridge_process_once = INIT_ONCE_STATIC_INIT;
++static BOOL bridge_process_allowed;
+
+ static SOCKET server_sock = INVALID_SOCKET;
+ static BOOL winsock_loaded = FALSE;
+ static char xinput_min_index = 3;
+
++static WCHAR ascii_tolowerW(WCHAR ch)
++{
++    if (ch >= 'A' && ch <= 'Z') return ch + ('a' - 'A');
++    return ch;
++}
++
++static BOOL basename_equals(const WCHAR *name, const WCHAR *expected)
++{
++    while (*name && *expected)
++    {
++        if (ascii_tolowerW(*name++) != ascii_tolowerW(*expected++)) return FALSE;
++    }
++    return !*name && !*expected;
++}
++
++static BOOL WINAPI check_bridge_process_once(INIT_ONCE *once, void *param, void **context)
++{
++    WCHAR path[MAX_PATH];
++    WCHAR *basename;
++    DWORD len;
++
++    len = GetModuleFileNameW(NULL, path, ARRAY_SIZE(path));
++    if (!len || len >= ARRAY_SIZE(path)) return TRUE;
++
++    basename = path + len;
++    while (basename > path && basename[-1] != '\\' && basename[-1] != '/') basename--;
++
++    bridge_process_allowed = basename_equals(basename, L"Wow.exe") ||
++                             basename_equals(basename, L"WowClassic.exe");
++    return TRUE;
++}
++
++static BOOL bridge_enabled_for_process(void)
++{
++    InitOnceExecuteOnce(&bridge_process_once, check_bridge_process_once, NULL, NULL);
++    return bridge_process_allowed;
++}
++
+ static void close_server_socket(void)
+ {
+     if (server_sock != INVALID_SOCKET)
+@@ -374,10 +414,13 @@ static BOOL WINAPI start_read_thread_once(INIT_ONCE *once, void *param, void **c
+     return TRUE;
+ }
+
+-static void start_read_thread(void)
++static BOOL start_read_thread(void)
+ {
+     static INIT_ONCE init_once = INIT_ONCE_STATIC_INIT;
++
++    if (!bridge_enabled_for_process()) return FALSE;
+     InitOnceExecuteOnce(&init_once, start_read_thread_once, NULL, NULL);
++    return TRUE;
+ }
+
+ static BOOL controller_is_connected(DWORD index)
+@@ -400,7 +443,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
+         break;
+     case DLL_PROCESS_DETACH:
+         if (reserved) break;
+-        controller_destroy();
++        if (thread_running) controller_destroy();
+         break;
+     }
+     return TRUE;
+@@ -414,7 +457,7 @@ void WINAPI DECLSPEC_HOTPATCH XInputEnable(BOOL enable)
+     to the controllers. Setting to true will send the last vibration
+     value (sent to XInputSetState) to the controller and allow messages to
+     be sent */
+-    start_read_thread();
++    if (!start_read_thread()) return;
+
+     if (!controller.connected) return;
+     controller.enabled = enable;
+@@ -424,9 +467,8 @@ DWORD WINAPI DECLSPEC_HOTPATCH XInputSetState(DWORD index, XINPUT_VIBRATION *vib
+ {
+     TRACE("index %lu, vibration %p.\n", index, vibration);
+
+-    start_read_thread();
+-
+     if (index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
++    if (!start_read_thread()) return ERROR_DEVICE_NOT_CONNECTED;
+     if (!controller_is_connected(index)) return ERROR_DEVICE_NOT_CONNECTED;
+
+     return ERROR_SUCCESS;
+@@ -437,10 +479,8 @@ DWORD WINAPI DECLSPEC_HOTPATCH XInputSetState(DWORD index, XINPUT_VIBRATION *vib
+ static DWORD xinput_get_state(DWORD index, XINPUT_STATE *state)
+ {
+     if (!state) return ERROR_BAD_ARGUMENTS;
+-
+-    start_read_thread();
+-
+     if (index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
++    if (!start_read_thread()) return ERROR_DEVICE_NOT_CONNECTED;
+     if (index < xinput_min_index) xinput_min_index = index;
+     if (index == xinput_min_index) index = 0;
+     if (!controller_is_connected(index)) return ERROR_DEVICE_NOT_CONNECTED;
+@@ -667,6 +707,7 @@ DWORD WINAPI DECLSPEC_HOTPATCH XInputGetKeystroke(DWORD index, DWORD reserved, P
+     TRACE("index %lu, reserved %lu, keystroke %p.\n", index, reserved, keystroke);
+
+     if (index >= XUSER_MAX_COUNT && index != XUSER_INDEX_ANY) return ERROR_BAD_ARGUMENTS;
++    if (!start_read_thread()) return ERROR_DEVICE_NOT_CONNECTED;
+     if (!controller_is_connected(index != XUSER_INDEX_ANY ? index : 0)) return ERROR_DEVICE_NOT_CONNECTED;
+
+     return check_for_keystroke(keystroke);
+@@ -686,6 +727,7 @@ DWORD WINAPI DECLSPEC_HOTPATCH XInputGetCapabilities(DWORD index, DWORD flags, X
+ DWORD WINAPI DECLSPEC_HOTPATCH XInputGetDSoundAudioDeviceGuids(DWORD index, GUID *render_guid, GUID *capture_guid)
+ {
+     if (index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
++    if (!start_read_thread()) return ERROR_DEVICE_NOT_CONNECTED;
+     if (!controller_is_connected(index)) return ERROR_DEVICE_NOT_CONNECTED;
+
+     return ERROR_NOT_SUPPORTED;
+@@ -694,6 +736,7 @@ DWORD WINAPI DECLSPEC_HOTPATCH XInputGetDSoundAudioDeviceGuids(DWORD index, GUID
+ DWORD WINAPI DECLSPEC_HOTPATCH XInputGetBatteryInformation(DWORD index, BYTE type, XINPUT_BATTERY_INFORMATION* battery)
+ {
+     if (index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
++    if (!start_read_thread()) return ERROR_DEVICE_NOT_CONNECTED;
+     if (!controller_is_connected(index)) return ERROR_DEVICE_NOT_CONNECTED;
+
+     return ERROR_NOT_SUPPORTED;
+@@ -703,9 +746,8 @@ DWORD WINAPI DECLSPEC_HOTPATCH XInputGetCapabilitiesEx(DWORD unk, DWORD index, D
+ {
+     TRACE("unk %lu, index %lu, flags %#lx, capabilities %p.\n", unk, index, flags, caps);
+
+-    start_read_thread();
+-
+     if (index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
++    if (!start_read_thread()) return ERROR_DEVICE_NOT_CONNECTED;
+     if (!controller_is_connected(index)) return ERROR_DEVICE_NOT_CONNECTED;
+
+     EnterCriticalSection(&controller.crit);
+@@ -721,4 +763,4 @@ DWORD WINAPI DECLSPEC_HOTPATCH XInputGetCapabilitiesEx(DWORD unk, DWORD index, D
+
+     LeaveCriticalSection(&controller.crit);
+     return ERROR_SUCCESS;
+-}
+\ No newline at end of file
++}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <group android:checkableBehavior="single">
+        <item android:icon="@drawable/icon_shortcut" android:id="@+id/main_menu_launcher" android:title="@string/box_launcher_title" />
+        <item android:icon="@drawable/icon_debug" android:id="@+id/main_menu_box_debug" android:title="@string/box_debug_title" />
+        <item android:icon="@drawable/icon_export" android:id="@+id/main_menu_titan_profile_sync" android:title="@string/titan_profile_sync_title" />
+        <item android:icon="@drawable/icon_input_controls" android:id="@+id/main_menu_input_controls" android:title="@string/input_controls" />
+        <item android:icon="@drawable/icon_settings" android:id="@+id/main_menu_settings" android:title="@string/settings" />
+        <item android:icon="@drawable/icon_about" android:id="@+id/main_menu_about" android:title="@string/about" />
+    </group>
+</menu>

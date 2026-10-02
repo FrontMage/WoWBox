@@ -1,0 +1,281 @@
+--- a/framegen/src/core/device.cpp
++++ b/framegen/src/core/device.cpp
+@@ -31,7 +31,7 @@
+ extern const char* kFramegenBuildStamp;
+ const char* kFramegenBuildStamp =
+     "framegen source: feb7899a6d0f419e27bf47102b6df8ff17e50122 "
+-    "wowbox-route-isolation-v2";
++    "wowbox-route-isolation-v3-staged-present";
+ }
+
+ using namespace LSFG::Core;
+--- a/src/hooks.cpp
++++ b/src/hooks.cpp
+@@ -60,6 +60,7 @@
+         std::vector<VkImage> images;
+         VkPresentModeKHR presentMode{VK_PRESENT_MODE_FIFO_KHR};
+         std::optional<LsContext> context;
++        bool instrumented{};
+         bool disabled{};
+     };
+
+@@ -81,7 +82,6 @@
+                 removed = std::move(it->second);
+                 swapchains.erase(it);
+             }
+-            routeSelector.remove(reinterpret_cast<uintptr_t>(swapchain));
+         }
+         // Destruct a potentially expensive LSFG context after releasing the
+         // shared route lock.
+@@ -144,6 +144,7 @@
+                     ownedSwapchains.push_back(swapchain);
+             }
+             deviceToInfo.erase(device);
++            routeSelector.remove(reinterpret_cast<uintptr_t>(device));
+         }
+         for (VkSwapchainKHR swapchain : ownedSwapchains)
+             removeSwapchainState(swapchain);
+@@ -168,74 +169,121 @@
+         }
+         Utils::resetLimitN("swapMap");
+
++        const uintptr_t routeKey = reinterpret_cast<uintptr_t>(device);
++        bool selected{};
++        {
++            std::lock_guard<std::mutex> lock(stateMutex);
++            selected = routeSelector.isSelected(routeKey);
++        }
++
+         VkSwapchainCreateInfoKHR createInfo = *pCreateInfo;
+-        const auto maxImages = Utils::getMaxImageCount(
+-            deviceInfo.physicalDevice, pCreateInfo->surface);
+-        createInfo.minImageCount = createInfo.minImageCount + 1
+-            + static_cast<uint32_t>(deviceInfo.queue.first);
+-        if (createInfo.minImageCount > maxImages) {
+-            createInfo.minImageCount = maxImages;
+-            Utils::logLimitN("swapCount", 10,
+-                "Requested image count (" +
+-                    std::to_string(pCreateInfo->minImageCount) + ") "
+-                "exceeds maximum allowed (" +
+-                    std::to_string(maxImages) + "). "
+-                "Continuing with maximum allowed image count. "
+-                "This might lead to performance degradation.");
+-        } else {
+-            Utils::resetLimitN("swapCount");
++        if (selected) {
++            try {
++                const auto maxImages = Utils::getMaxImageCount(
++                    deviceInfo.physicalDevice, pCreateInfo->surface);
++                createInfo.minImageCount = createInfo.minImageCount + 1
++                    + static_cast<uint32_t>(deviceInfo.queue.first);
++                if (createInfo.minImageCount > maxImages) {
++                    createInfo.minImageCount = maxImages;
++                    Utils::logLimitN("swapCount", 10,
++                        "Requested image count (" +
++                            std::to_string(pCreateInfo->minImageCount) + ") "
++                        "exceeds maximum allowed (" +
++                            std::to_string(maxImages) + "). "
++                        "Continuing with maximum allowed image count. "
++                        "This might lead to performance degradation.");
++                } else {
++                    Utils::resetLimitN("swapCount");
++                }
++                createInfo.imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
++                createInfo.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
++                createInfo.presentMode = Config::activeConf.e_present;
++            } catch (const std::exception& e) {
++                Utils::logLimitN("swapSetup", 5,
++                    "Unable to prepare the selected swapchain; "
++                    "using the original swapchain unchanged:\n- "
++                    + std::string(e.what()));
++                std::lock_guard<std::mutex> lock(stateMutex);
++                routeSelector.remove(routeKey);
++                selected = false;
++            }
+         }
+
+-        createInfo.imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+-        createInfo.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+-        createInfo.presentMode = Config::activeConf.e_present;
++        auto res = Layer::ovkCreateSwapchainKHR(
++            device, selected ? &createInfo : pCreateInfo, pAllocator, pSwapchain);
++        if (res != VK_SUCCESS && selected) {
++            std::cerr << "lsfg-vk: Selected-route swapchain setup failed; "
++                         "retrying the original swapchain unchanged.\n";
++            {
++                std::lock_guard<std::mutex> lock(stateMutex);
++                routeSelector.remove(routeKey);
++            }
++            selected = false;
++            res = Layer::ovkCreateSwapchainKHR(
++                device, pCreateInfo, pAllocator, pSwapchain);
++        }
++        if (res != VK_SUCCESS) return res;
+
+         if (pCreateInfo->oldSwapchain)
+             removeSwapchainState(pCreateInfo->oldSwapchain);
+
+-        auto res = Layer::ovkCreateSwapchainKHR(
+-            device, &createInfo, pAllocator, pSwapchain);
+-        if (res != VK_SUCCESS)
+-            return res;
+-
+         try {
+-            uint32_t imageCount{};
+-            res = Layer::ovkGetSwapchainImagesKHR(
+-                device, *pSwapchain, &imageCount, nullptr);
+-            if (res != VK_SUCCESS || imageCount == 0)
+-                throw LSFG::vulkan_error(
+-                    res, "Failed to get swapchain image count");
+-
+-            std::vector<VkImage> images(imageCount);
+-            res = Layer::ovkGetSwapchainImagesKHR(
+-                device, *pSwapchain, &imageCount, images.data());
+-            if (res != VK_SUCCESS)
+-                throw LSFG::vulkan_error(
+-                    res, "Failed to get swapchain images");
+-
+             auto state = std::make_shared<SwapchainState>();
+             state->deviceInfo = deviceInfo;
+             state->swapchain = *pSwapchain;
+             state->extent = pCreateInfo->imageExtent;
+-            state->images = std::move(images);
+-            state->presentMode = createInfo.presentMode;
++            state->presentMode = selected
++                ? createInfo.presentMode : pCreateInfo->presentMode;
++            state->instrumented = selected;
++
++            if (selected) {
++                try {
++                    uint32_t imageCount{};
++                    res = Layer::ovkGetSwapchainImagesKHR(
++                        device, *pSwapchain, &imageCount, nullptr);
++                    if (res != VK_SUCCESS || imageCount == 0)
++                        throw LSFG::vulkan_error(
++                            res, "Failed to get swapchain image count");
++
++                    std::vector<VkImage> images(imageCount);
++                    res = Layer::ovkGetSwapchainImagesKHR(
++                        device, *pSwapchain, &imageCount, images.data());
++                    if (res != VK_SUCCESS)
++                        throw LSFG::vulkan_error(
++                            res, "Failed to get swapchain images");
++                    state->images = std::move(images);
++                } catch (const std::exception& e) {
++                    Utils::logLimitN("swapCtxCreate", 5,
++                        "An error occurred while preparing the selected "
++                        "swapchain:\n- " + std::string(e.what()) +
++                        "\nFrame generation will remain disabled for this "
++                        "swapchain.");
++                    state->instrumented = false;
++                    state->disabled = true;
++                    std::lock_guard<std::mutex> lock(stateMutex);
++                    routeSelector.remove(routeKey);
++                }
++            }
++
+             {
+                 std::lock_guard<std::mutex> lock(stateMutex);
+                 swapchains[*pSwapchain] = state;
+             }
+-
+-            std::cerr << "lsfg-vk: Swapchain candidate registered: application="
+-                      << deviceInfo.application
++            std::cerr << "lsfg-vk: "
++                      << (state->instrumented
++                          ? "Selected swapchain instrumented"
++                          : "Ordinary swapchain candidate registered")
++                      << ": application=" << deviceInfo.application
+                       << ", engine=" << deviceInfo.engine
+                       << ", extent=" << state->extent.width << 'x'
+-                      << state->extent.height
+-                      << ", images=" << imageCount << ".\n";
++                      << state->extent.height << ".\n";
+             Utils::resetLimitN("swapCtxCreate");
+         } catch (const std::exception& e) {
+             Utils::logLimitN("swapCtxCreate", 5,
+-                "An error occurred while registering the swapchain candidate:\n"
+-                "- " + std::string(e.what()) +
+-                "\nFrame generation will remain disabled for this swapchain.");
++                "Unable to register swapchain state; presentation will "
++                "pass through unchanged:\n- " + std::string(e.what()));
++            std::lock_guard<std::mutex> lock(stateMutex);
++            routeSelector.remove(routeKey);
+         }
+         return VK_SUCCESS;
+     }
+@@ -273,7 +321,7 @@
+         {
+             std::lock_guard<std::mutex> lock(stateMutex);
+             decision = routeSelector.observeSuccess(
+-                reinterpret_cast<uintptr_t>(state->swapchain),
++                reinterpret_cast<uintptr_t>(state->deviceInfo.device),
+                 monotonicMs());
+         }
+         if (decision.newlySelected) {
+@@ -281,7 +329,9 @@
+                       << state->deviceInfo.application
+                       << ", engine=" << state->deviceInfo.engine
+                       << ", extent=" << state->extent.width << 'x'
+-                      << state->extent.height << ".\n";
++                      << state->extent.height
++                      << "; requesting one swapchain recreation.\n";
++            return VK_ERROR_OUT_OF_DATE_KHR;
+         }
+         return result;
+     }
+@@ -305,10 +355,11 @@
+                 return Layer::ovkQueuePresentKHR(queue, pPresentInfo);
+             state = it->second;
+             selected = routeSelector.isSelected(
+-                reinterpret_cast<uintptr_t>(handle));
++                reinterpret_cast<uintptr_t>(state->deviceInfo.device));
+         }
+
+-        enforcePresentMode(pPresentInfo, state->presentMode);
++        if (state->instrumented)
++            enforcePresentMode(pPresentInfo, state->presentMode);
+
+         try {
+             auto& conf = Config::activeConf;
+@@ -319,7 +370,8 @@
+                 Layer::ovkQueuePresentKHR(queue, pPresentInfo);
+                 return VK_ERROR_OUT_OF_DATE_KHR;
+             }
+-            if (state->presentMode != conf.e_present) {
++            if (state->instrumented
++                    && state->presentMode != conf.e_present) {
+                 Layer::ovkQueuePresentKHR(queue, pPresentInfo);
+                 return VK_ERROR_OUT_OF_DATE_KHR;
+             }
+@@ -328,6 +380,12 @@
+             if (!selected)
+                 return ordinaryPresentAndObserve(
+                     queue, pPresentInfo, state);
++            if (!state->instrumented) {
++                VkResult result = Layer::ovkQueuePresentKHR(
++                    queue, pPresentInfo);
++                return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR
++                    ? VK_ERROR_OUT_OF_DATE_KHR : result;
++            }
+
+             std::lock_guard<std::mutex> routeLock(state->mutex);
+             if (!state->context.has_value()) {
+@@ -355,7 +413,7 @@
+             if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
+                 std::lock_guard<std::mutex> lock(stateMutex);
+                 routeSelector.observeSuccess(
+-                    reinterpret_cast<uintptr_t>(handle),
++                    reinterpret_cast<uintptr_t>(state->deviceInfo.device),
+                     monotonicMs());
+             }
+             Utils::resetLimitN("swapPresent");
+@@ -373,7 +431,7 @@
+             {
+                 std::lock_guard<std::mutex> lock(stateMutex);
+                 routeSelector.remove(
+-                    reinterpret_cast<uintptr_t>(handle));
++                    reinterpret_cast<uintptr_t>(state->deviceInfo.device));
+             }
+             return Layer::ovkQueuePresentKHR(queue, pPresentInfo);
+         }

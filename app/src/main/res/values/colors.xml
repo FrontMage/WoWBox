@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand_obsidian">#0B1118</color>
+    <color name="brand_surface">#14212D</color>
+    <color name="brand_surface_elevated">#1C2B39</color>
+    <color name="brand_graphite">#20262C</color>
+    <color name="brand_steel">#263B4D</color>
+    <color name="brand_steel_light">#536B80</color>
+    <color name="brand_gold">#D6A84B</color>
+    <color name="brand_gold_muted">#66D6A84B</color>
+    <color name="brand_gold_pressed">#B98B36</color>
+    <color name="brand_text_primary">#F2F5F7</color>
+    <color name="brand_text_secondary">#AAB6C2</color>
+    <color name="brand_border">#334556</color>
+
+    <color name="window_background_color">@color/brand_obsidian</color>
+    <color name="colorPrimary">@color/brand_steel</color>
+    <color name="colorPrimaryDark">@color/brand_obsidian</color>
+    <color name="colorAccent">@color/brand_gold</color>
+</resources>

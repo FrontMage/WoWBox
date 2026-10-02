@@ -1,0 +1,14 @@
+.gradle/
+build/
+app/build/
+app/.cxx/
+local.properties
+*.apk
+*.jks
+*.keystore
+.DS_Store
+__pycache__/
+out/
+app/src/main/assets/**/*.tzst
+app/src/main/assets/*.tzst
+app/src/main/assets/*.txz

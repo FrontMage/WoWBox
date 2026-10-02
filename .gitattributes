@@ -1,0 +1,9 @@
+app/src/main/cpp/** -whitespace
+app/src/main/res/** -whitespace
+android_sysvshm/** -whitespace
+audio_plugin/** -whitespace
+# Preserve the imported application, asset and Windows-wrapper bytes.
+app/src/main/java/** -whitespace
+app/src/main/assets/** -whitespace
+gradlew.bat -whitespace
+tools/wine-patches/** -whitespace

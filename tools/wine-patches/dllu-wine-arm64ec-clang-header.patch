@@ -1,0 +1,52 @@
+diff --git a/include/winnt.h b/include/winnt.h
+index bdc86af59f2..39d09839522 100644
+--- a/include/winnt.h
++++ b/include/winnt.h
+@@ -7249,7 +7249,7 @@ static void __wine_memory_barrier_acq_rel(void)
+ {
+ #if defined(__aarch64__) || defined(__arm64ec__)
+     __dmb(_ARM64_BARRIER_ISH);
+-#elif defined(__i386__) || defined(__x86_64__)
++#elif defined(__i386__) || (defined(__x86_64__) && !defined(__arm64ec__))
+ #pragma warning(suppress:4996)
+     _ReadWriteBarrier();
+ #elif defined(__arm__)
+@@ -7385,7 +7385,7 @@ static FORCEINLINE LONG WINAPI InterlockedExchange( LONG volatile *dest, LONG va
+     LONG ret;
+ #if (__GNUC__ > 4) || ((__GNUC__ == 4) && (__GNUC_MINOR__ >= 7))
+     ret = __atomic_exchange_n( dest, val, __ATOMIC_SEQ_CST );
+-#elif defined(__i386__) || defined(__x86_64__)
++#elif defined(__i386__) || (defined(__x86_64__) && !defined(__arm64ec__))
+     __asm__ __volatile__( "lock; xchgl %0,(%1)"
+                           : "=r" (ret) :"r" (dest), "0" (val) : "memory" );
+ #else
+@@ -7444,7 +7444,7 @@ static FORCEINLINE void * WINAPI InterlockedExchangePointer( void *volatile *des
+     void *ret;
+ #if (__GNUC__ > 4) || ((__GNUC__ == 4) && (__GNUC_MINOR__ >= 7))
+     ret = __atomic_exchange_n( dest, val, __ATOMIC_SEQ_CST );
+-#elif defined(__x86_64__)
++#elif defined(__x86_64__) && !defined(__arm64ec__)
+     __asm__ __volatile__( "lock; xchgq %0,(%1)" : "=r" (ret) :"r" (dest), "0" (val) : "memory" );
+ #elif defined(__i386__)
+     __asm__ __volatile__( "lock; xchgl %0,(%1)" : "=r" (ret) :"r" (dest), "0" (val) : "memory" );
+@@ -7479,7 +7479,7 @@ static FORCEINLINE void MemoryBarrier(void)
+     __sync_synchronize();
+ }
+
+-#if defined(__x86_64__) || defined(__i386__)
++#if (defined(__x86_64__) && !defined(__arm64ec__)) || defined(__i386__)
+ /* On x86, Support old GCC with either no or buggy (GCC BZ#81316) __atomic_* support */
+ #define __WINE_ATOMIC_LOAD_ACQUIRE(ptr, ret) do { C_ASSERT(sizeof(*(ptr)) <= sizeof(void *)); *(ret) = *(ptr); __asm__ __volatile__( "" ::: "memory" ); } while (0)
+ #define __WINE_ATOMIC_LOAD_RELAXED(ptr, ret) do { C_ASSERT(sizeof(*(ptr)) <= sizeof(void *)); *(ret) = *(ptr); } while (0)
+@@ -7558,9 +7558,9 @@ static FORCEINLINE void WriteNoFence64( LONG64 volatile *dest, LONG64 value )
+
+ static FORCEINLINE DECLSPEC_NORETURN void __fastfail(unsigned int code)
+ {
+-#if defined(__x86_64__) || defined(__i386__)
++#if (defined(__x86_64__) && !defined(__arm64ec__)) || defined(__i386__)
+     for (;;) __asm__ __volatile__( "int $0x29" :: "c" ((ULONG_PTR)code) : "memory" );
+-#elif defined(__aarch64__)
++#elif defined(__aarch64__) || defined(__arm64ec__)
+     register ULONG_PTR val __asm__("x0") = code;
+     for (;;) __asm__ __volatile__( "brk #0xf003" :: "r" (val) : "memory" );
+ #elif defined(__arm__)
