@@ -32,7 +32,7 @@ import java.util.ArrayList;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
-public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindowModificationListener, Pointer.OnPointerMotionListener {
+public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindowModificationListener, Pointer.OnPointerMotionListener, XServerRenderer {
     public final XServerView xServerView;
     private final XServer xServer;
     public final VertexAttribute quadVertices = new VertexAttribute("position", 2);
@@ -540,5 +540,12 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
 
     public void setUnviewableWMClasses(String... unviewableWMNames) {
         this.unviewableWMClasses = unviewableWMNames;
+    }
+    @Override public com.winlator.widget.XServerRendererView getRendererView() { return xServerView; }
+    @Override public org.json.JSONObject buildDisplayStatus() {
+        org.json.JSONObject state = new org.json.JSONObject();
+        try { state.put("active", "gl"); state.put("backend", "OpenGL ES/EGL"); }
+        catch (org.json.JSONException ignored) {}
+        return state;
     }
 }

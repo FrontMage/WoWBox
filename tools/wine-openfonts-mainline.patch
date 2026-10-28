@@ -1,0 +1,17 @@
+--- a/loader/wine.inf.in
++++ b/loader/wine.inf.in
+@@ -557,10 +557,10 @@
+ HKLM,%FontsNT%,"Times New Roman (TrueType)",,"times.ttf"
+ HKLM,%FontsNT%,"Webdings (TrueType)",,"webdings.ttf"
+ HKLM,%FontsNT%,"Wingdings (TrueType)",,"wingdings.ttf"
+-HKCU,Software\Wine\Fonts\Replacements,"Palatino Linotype",,"Times New Roman"
+-HKCU,Software\Wine\Fonts\Replacements,"Verdana",,"Times New Roman"
+-HKCU,Software\Wine\Fonts\Replacements,"Segoe UI Semibold",,"Times New Roman"
+-HKCU,Software\Wine\Fonts\Replacements,"Segoe UI",,"Times New Roman"
++HKCU,Software\Wine\Fonts\Replacements,"Palatino Linotype",,"DejaVu Serif"
++HKCU,Software\Wine\Fonts\Replacements,"Verdana",,"DejaVu Sans"
++HKCU,Software\Wine\Fonts\Replacements,"Segoe UI Semibold",,"DejaVu Sans"
++HKCU,Software\Wine\Fonts\Replacements,"Segoe UI",,"DejaVu Sans"
+ 
+ [MCI]
+ HKLM,%Mci32Str%,"AVIVideo",,"mciavi32.dll"

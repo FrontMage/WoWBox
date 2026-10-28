@@ -52,6 +52,37 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main_activity);
+        // Recover any interrupted runtime transaction before starting the debug
+        // server or loading the persisted Box spec. Recovery can hash many
+        // files, so it must not run on Android's UI thread.
+        preloaderDialog.show(R.string.box_update_checking);
+        new Thread(() -> {
+            String error = null;
+            try {
+                BoxRuntime.get(getApplicationContext()).recoverPendingReleaseBeforeLaunch();
+            }
+            catch (RuntimeException failure) {
+                error = failure.getMessage() != null ? failure.getMessage() : failure.getClass().getSimpleName();
+            }
+            final String result = error;
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                preloaderDialog.close();
+                if (result != null) {
+                    new androidx.appcompat.app.AlertDialog.Builder(this)
+                            .setTitle(R.string.box_install_failed)
+                            .setMessage(R.string.box_update_recovery_failed)
+                            .setCancelable(false)
+                            .setPositiveButton(android.R.string.ok, (dialog, which) -> finish())
+                            .show();
+                    return;
+                }
+                finishInitialSetup();
+            });
+        }, "wowbox-startup-recovery").start();
+    }
+
+    private void finishInitialSetup() {
         BoxDebugServer.get(this).start();
 
         drawerLayout = findViewById(R.id.DrawerLayout);
@@ -95,6 +126,12 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
     public void onPause() {
         BoxAutomationState.clearForegroundActivity("MainActivity");
         super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        preloaderDialog.close();
+        super.onDestroy();
     }
 
     @Override

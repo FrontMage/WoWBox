@@ -18,6 +18,8 @@ public class RangeScroller {
     private Binding binding = Binding.NONE;
     private boolean isActionDown = false;
     private boolean scrolling = false;
+    private boolean bindingPressed = false;
+    private long generation;
     private Timer timer;
 
     public RangeScroller(InputControlsView inputControlsView, ControlElement element) {
@@ -79,7 +81,7 @@ public class RangeScroller {
     }
 
     public void handleTouchDown(float x, float y) {
-        destroyTimer();
+        cancelTouch();
 
         scrolling = false;
         isActionDown = true;
@@ -87,12 +89,15 @@ public class RangeScroller {
         touchTime = System.currentTimeMillis();
         lastPosition = element.getOrientation() == 0 ? x : y;
         element.setBinding(Binding.NONE);
+        final long touchGeneration = generation;
 
         timer = new Timer(true);
         timer.schedule(new TimerTask() {
             @Override
             public void run() {
-                if (!scrolling) inputControlsView.post(() -> inputControlsView.handleInputEvent(binding, true));
+                inputControlsView.post(() -> {
+                    if (generation == touchGeneration && isActionDown && !scrolling) setBindingPressed(true);
+                });
             }
         }, TouchpadView.MAX_TAP_MILLISECONDS);
     }
@@ -123,13 +128,32 @@ public class RangeScroller {
     public void handleTouchUp() {
         if (isActionDown) {
             destroyTimer();
+            final long releaseGeneration = ++generation;
             if (isTap() && !scrolling) {
-                inputControlsView.handleInputEvent(binding, true);
-                final Binding finalBinding = binding;
-                inputControlsView.postDelayed(() -> inputControlsView.handleInputEvent(finalBinding, false), 30);
+                setBindingPressed(true);
+                inputControlsView.postDelayed(() -> {
+                    if (generation == releaseGeneration) setBindingPressed(false);
+                }, 30);
             }
-            else inputControlsView.handleInputEvent(binding, false);
+            else setBindingPressed(false);
         }
         isActionDown = false;
+    }
+
+    private void setBindingPressed(boolean pressed) {
+        if (bindingPressed == pressed) return;
+        inputControlsView.handleInputEvent(binding, pressed);
+        bindingPressed = pressed;
+    }
+
+    public void cancelTouch() {
+        ++generation;
+        destroyTimer();
+        setBindingPressed(false);
+        isActionDown = false;
+        scrolling = false;
+        binding = Binding.NONE;
+        touchTime = 0;
+        lastPosition = 0;
     }
 }

@@ -21,7 +21,10 @@ def digest(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verify", action="store_true", help="Verify local assets without downloading")
+    parser.add_argument("--bundle", type=Path, help="Use an already downloaded release bundle")
     args = parser.parse_args()
+    if args.verify and args.bundle:
+        parser.error("--verify and --bundle are mutually exclusive")
     manifest = json.loads((ROOT / "runtime-assets.json").read_text())
     required = manifest["files"]
     missing = [x for x in required if not (ROOT / x["path"]).is_file() or digest(ROOT / x["path"]) != x["sha256"]]
@@ -34,8 +37,13 @@ def main():
     if not bundle.get("sha256"):
         raise SystemExit("This source snapshot does not have a published runtime bundle yet.")
     with tempfile.TemporaryDirectory(prefix="wowbox-assets-") as temp:
-        archive = Path(temp) / bundle["filename"]
-        subprocess.run(["curl", "--fail", "--location", "--retry", "3", "--output", str(archive), bundle["url"]], check=True)
+        if args.bundle:
+            archive = args.bundle.resolve(strict=True)
+            if not archive.is_file():
+                raise SystemExit("Local runtime bundle is not a regular file")
+        else:
+            archive = Path(temp) / bundle["filename"]
+            subprocess.run(["curl", "--fail", "--location", "--retry", "3", "--output", str(archive), bundle["url"]], check=True)
         if digest(archive) != bundle["sha256"]:
             raise SystemExit("Runtime bundle checksum mismatch")
         expected = {x["path"]: x for x in required}

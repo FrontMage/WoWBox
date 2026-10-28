@@ -54,6 +54,7 @@ public class BoxRuntime {
     private final Context context;
     private BoxSpec spec;
     private BoxSessionManager sessionManager;
+    private volatile Thread releaseValidationThread;
 
     private BoxRuntime(Context context) {
         this.context = context.getApplicationContext();
@@ -70,19 +71,29 @@ public class BoxRuntime {
     }
 
     public synchronized BoxSpec getSpec() {
+        requireRecoveredReleaseState();
         if (spec == null) {
             ensureBoxDir();
             recoverSpecTransactionIfNeeded();
-            spec = BoxSpec.load(context, BoxPaths.getSpecFile(context));
-            migrateLegacyBoxSpecIfNeeded();
-            migrateRequiredInputBridgeLayerIfNeeded();
-            if (!BuildConfig.AGENT_DRIVE_PROBE_BUILD) {
-                migrateRequiredFrameGenerationLayerIfNeeded();
+            File persisted = BoxPaths.getSpecFile(context);
+            if (FileUtils.isSymlink(persisted)) {
+                throw new IllegalStateException("unsafe_persisted_box_spec");
             }
-            migrateRetiredLaunchTargetsIfNeeded();
-            migrateBattleNetGpuRenderingArgsIfNeeded();
-            migrateWineDebugOwnershipIfNeeded();
-            migrateVerifiedWowInputBridgeStateIfNeeded();
+            if (persisted.isFile()) {
+                try {
+                    spec = BoxSpec.fromJson(new JSONObject(FileUtils.readString(persisted)));
+                } catch (JSONException | RuntimeException error) {
+                    throw new IllegalStateException("invalid_persisted_box_spec", error);
+                }
+            } else {
+                if (getState().optBoolean("installed", false) ||
+                        new File(getContainerRootDir(), ".wine").exists()) {
+                    throw new IllegalStateException("missing_persisted_box_spec");
+                }
+                spec = BoxSpec.load(context, persisted);
+            }
+            // Existing specs and user environment/launch targets are only
+            // changed by an explicit, journaled release migration.
             persistSpecIfMissing();
             injectAgentDriveProbeTargets();
         }
@@ -352,6 +363,7 @@ public class BoxRuntime {
     }
 
     public synchronized void saveSpec(BoxSpec spec) {
+        requireRecoveredReleaseState();
         if (spec == null) throw new IllegalArgumentException("Box spec is missing");
         ensureBoxDir();
         File file = BoxPaths.getSpecFile(context);
@@ -452,6 +464,26 @@ public class BoxRuntime {
 
     public synchronized BoxSpec refreshSpecFromBundledAssetForInitialInstall() {
         if (isPrefixProtected()) throw new IllegalStateException("protected_prefix");
+        // Never replace the active persisted spec before discovering an
+        // existing prefix. Upgrades must use the release transaction.
+        if (isInstalled()) {
+            throw new IllegalStateException("existing_prefix: initial installation is disabled");
+        }
+        try {
+            File marker = new File(BoxPaths.getBoxDir(context), "initial-install-owner");
+            if (BoxInitialInstallGuard.mayResume(marker, BoxPaths.getSpecFile(context), false)) {
+                return getSpec();
+            }
+            File imageRoot = ImageFs.find(context).getRootDir();
+            if (imageRoot.exists() || FileUtils.isSymlink(imageRoot)) {
+                File[] files = imageRoot.listFiles();
+                if (FileUtils.isSymlink(imageRoot) || files == null || files.length != 0) {
+                    throw new IllegalStateException("existing_imagefs: initial installation is disabled");
+                }
+            }
+        } catch (java.io.IOException error) {
+            throw new IllegalStateException("initial_install_guard_failed", error);
+        }
         return refreshSpecFromBundledAsset(false);
     }
 
@@ -648,6 +680,7 @@ public class BoxRuntime {
     }
 
     public synchronized JSONObject getState() {
+        requireRecoveredReleaseState();
         File file = BoxPaths.getStateFile(context);
         if (!file.isFile()) return new JSONObject();
         try {
@@ -659,6 +692,7 @@ public class BoxRuntime {
     }
 
     public synchronized void saveState(JSONObject state) {
+        requireRecoveredReleaseState();
         ensureBoxDir();
         FileUtils.writeString(BoxPaths.getStateFile(context), state.toString());
     }
@@ -793,6 +827,11 @@ public class BoxRuntime {
             syncContainerDrivesFromSpec(container);
             syncContainerEnvVarsFromSpec(container);
             syncContainerGraphicsFromSpec(container);
+            String nativeComponents = NativeShaderCompilerProfile.winComponents(getSpec(), container.getWinComponents());
+            if (!nativeComponents.equals(container.getWinComponents())) {
+                container.setWinComponents(nativeComponents);
+                container.saveData();
+            }
 	        }
 	        catch (JSONException ignored) {}
 	    } else {
@@ -819,7 +858,7 @@ public class BoxRuntime {
         }
         container.setAudioDriver(Container.DEFAULT_AUDIO_DRIVER);
         container.setScreenSize(Container.DEFAULT_SCREEN_SIZE);
-        container.setWinComponents(Container.FALLBACK_WINCOMPONENTS);
+        container.setWinComponents(NativeShaderCompilerProfile.winComponents(spec, Container.FALLBACK_WINCOMPONENTS));
         container.setDesktopTheme(container.getDesktopTheme());
         container.setFEXCorePreset(spec.env.fexPreset);
         container.setFEXCoreVersion(DefaultVersion.FEXCORE);
@@ -1297,8 +1336,12 @@ public class BoxRuntime {
     }
 
     public String launchDesktop(BoxDebugConfig debugConfig) {
+        synchronized (BoxInstaller.class) {
+        recoverPendingReleaseBeforeLaunch();
+        requireNoPendingBundledReleaseUpgrade();
         requireWowInputBridgeMigrationComplete();
         getOrCreateContainer();
+        new BoxInstaller(context).prepareNativeDxEnvironment();
         recordLastLaunch("", true);
         String sessionId = getSessionManager().createSession("desktop", "", debugConfig);
         getSessionManager().markLaunchRequested(sessionId);
@@ -1309,6 +1352,7 @@ public class BoxRuntime {
         if (debugConfig != null) debugConfig.applyToIntent(intent);
         context.startActivity(intent);
         return sessionId;
+        }
     }
 
     public void launchExecutable(String absoluteHostPath) {
@@ -1316,8 +1360,12 @@ public class BoxRuntime {
     }
 
     public String launchExecutable(String absoluteHostPath, BoxDebugConfig debugConfig) {
+        synchronized (BoxInstaller.class) {
+        recoverPendingReleaseBeforeLaunch();
+        requireNoPendingBundledReleaseUpgrade();
         requireWowInputBridgeMigrationComplete();
         getOrCreateContainer();
+        new BoxInstaller(context).prepareNativeDxEnvironment();
         recordLastLaunch(absoluteHostPath, false);
         String sessionId = getSessionManager().createSession("executable", absoluteHostPath, debugConfig);
         getSessionManager().markLaunchRequested(sessionId);
@@ -1331,9 +1379,13 @@ public class BoxRuntime {
         if (debugConfig != null) debugConfig.applyToIntent(intent);
         context.startActivity(intent);
         return sessionId;
+        }
     }
 
     public String launchTarget(String targetId, BoxDebugConfig debugConfig) {
+        synchronized (BoxInstaller.class) {
+        recoverPendingReleaseBeforeLaunch();
+        requireNoPendingBundledReleaseUpgrade();
         BoxSpec.Target target = requireLaunchTarget(targetId);
         BoxSpec bundledSpec = BoxSpec.fromJsonString(
                 FileUtils.readString(context, BoxSpec.getBundledAssetPath()));
@@ -1342,6 +1394,7 @@ public class BoxRuntime {
                 bundledSpec.launch.findTarget(target.id));
         getOrCreateContainer();
         recordLastLaunch(target.guestPath, false);
+        new BoxInstaller(context).prepareNativeDxEnvironment();
         String sessionId = getSessionManager().createSession("target", target.guestPath, debugConfig);
         getSessionManager().markLaunchRequested(sessionId);
         Log.i(TAG, "launchTarget sessionId=" + sessionId + " id=" + target.id + " guestPath=" + target.guestPath);
@@ -1357,6 +1410,59 @@ public class BoxRuntime {
         if (debugConfig != null) debugConfig.applyToIntent(intent);
         context.startActivity(intent);
         return sessionId;
+        }
+    }
+
+    /** Recover an interrupted release before using any installed runtime. */
+    public void recoverPendingReleaseBeforeLaunch() {
+        synchronized (BoxInstaller.class) {
+            File journal = new File(BoxPaths.getBoxDir(context), "release-upgrade-transaction");
+            if (journal.exists() || FileUtils.isSymlink(journal)) {
+                if (XServerDisplayActivity.hasActiveSession() ||
+                        com.winlator.core.WineSessionProcessController.getInstance().hasActiveWineProcesses()) {
+                    throw new IllegalStateException("release_recovery_requires_idle");
+                }
+                try {
+                    BoxReleaseTransaction.recover(context.getFilesDir().getCanonicalFile(),
+                            new File(context.getFilesDir().getCanonicalFile(), "box/release-upgrade-transaction"));
+                    invalidateCachedSpec();
+                } catch (java.io.IOException e) {
+                    throw new IllegalStateException("release_recovery_failed", e);
+                }
+            }
+            try {
+                new BoxInstaller(context).cleanupAbandonedReleaseStages();
+            } catch (java.io.IOException e) {
+                throw new IllegalStateException("release_stage_cleanup_failed", e);
+            }
+            new BoxInstaller(context).finishPendingReleaseValidation();
+        }
+    }
+
+    private void requireNoPendingBundledReleaseUpgrade() {
+        if (new BoxInstaller(context).needsBundledReleaseUpgrade()) {
+            throw new IllegalStateException("release_upgrade_required");
+        }
+    }
+
+    synchronized void invalidateCachedSpec() {
+        spec = null;
+        releaseValidationThread = null;
+    }
+
+    /** Set the already-validated staged spec without running startup migrations. */
+    synchronized void setCachedSpecForReleaseValidation(BoxSpec candidate) {
+        releaseValidationThread = Thread.currentThread();
+        spec = candidate;
+    }
+
+    /** A pending journal must be recovered before any other state reader. */
+    private void requireRecoveredReleaseState() {
+        if (Thread.currentThread() == releaseValidationThread) return;
+        File journal = new File(BoxPaths.getBoxDir(context), "release-upgrade-transaction");
+        if (journal.exists() || FileUtils.isSymlink(journal)) {
+            throw new IllegalStateException("release_recovery_required");
+        }
     }
 
     static int resolveControlsProfileId(BoxSpec.Target activeTarget, BoxSpec.Target bundledTarget) {

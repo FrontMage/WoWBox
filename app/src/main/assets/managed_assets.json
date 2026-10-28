@@ -4,10 +4,10 @@
     "base-imagefs": "imagefs-wowbox-openfonts-afebea0a.txz",
     "graphics-wrapper-stack": "graphics_driver/graphics-stack-frontmage-bionic-a93355a9.tzst",
     "frame-generation-stack": "frame_generation/lsfg-vk-feb7899-wowbox-route-v3-8c31f59a.tzst",
-    "wine-runtime": "wine-runtime-wowbox-openfonts-9ac94fff.txz",
+    "wine-runtime": "wine-runtime-wowbox-mainline-openfonts-086c3fe6.txz",
     "prefix-template": "wine-prefix-wowbox-openfonts-350c6f28.tzst",
     "input-bridge-stack": "winhandler/winhandler-xinput-wow-filtered-arm64x-437d6859.tzst",
-    "cpu-emu-stack": "fexcore/fexcore-2508-frontmage-bnet-99d69a-native-mock-jemalloc-5f1dbc8d.tzst",
+    "cpu-emu-stack": "fexcore/fexcore-2508-wowbox-mainline-7519b960-2beba31f.tzst",
     "dx-wrapper-stack": "dxwrapper/dxvk-2.7.1-vkd3d-3.1.0-wowclassic-f1d78e4d-amd64.tzst",
     "gpu-driver-stack": "graphics_driver/adrenotools-turnip26.1.5-frontmage-ir3-nonstrict-ebad131-abc97b08.tzst"
   },
@@ -60,15 +60,15 @@
     },
     {
       "role": "wine-runtime",
-      "assetPath": "wine-runtime-wowbox-openfonts-9ac94fff.txz",
-      "filename": "wine-runtime-wowbox-openfonts-9ac94fff.txz",
-      "sha256": "9ac94fff85c5156e0179e1e11508b1cbb569d4f974bca8838df319327c6f291d",
-      "sizeBytes": 258510052,
+      "assetPath": "wine-runtime-wowbox-mainline-openfonts-086c3fe6.txz",
+      "filename": "wine-runtime-wowbox-mainline-openfonts-086c3fe6.txz",
+      "sha256": "086c3fe69c60493c2a43c9625a3b4d755bff2d6ebc3f44e02a0c85f49cc6efd6",
+      "sizeBytes": 143881768,
       "runtimeIdentifier": "proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff",
-      "tag": "v0.1.0",
-      "sourceRef": "GameNative Proton Wine Bionic base plus the reviewed DLLU Wine 47b268da ARM64X adaptations and Android ARM64EC ntdll live-view relocation commit 234e53a4543.",
-      "status": "baseline",
-      "notes": "Public Linux/Android runtime component used by the standard WoW Box release."
+      "tag": "v0.2.0-preview",
+      "sourceRef": "FrontMage/Proton 212f9e729f7f79a582aa1def2d313f21b4c2181c, FrontMage/proton-wine a545dee5aa1991ba77985a2cfe8d6a490152d166; four font substitution entries adjusted by tools/wine-openfonts-mainline.patch.",
+      "status": "candidate",
+      "notes": "Pinned mainline source; release candidate pending device acceptance."
     },
     {
       "role": "prefix-template",
@@ -84,14 +84,14 @@
     },
     {
       "role": "cpu-emu-stack",
-      "assetPath": "fexcore/fexcore-2508-frontmage-bnet-99d69a-native-mock-jemalloc-5f1dbc8d.tzst",
-      "filename": "fexcore-2508-frontmage-bnet-99d69a-native-mock-jemalloc-5f1dbc8d.tzst",
-      "sha256": "5f1dbc8db81adcbcc25e1e4119b8bb16d4abbeb8d37b06a95249764e21edeae3",
-      "sizeBytes": 1588283,
-      "tag": "v0.1.0",
-      "sourceRef": "FEX 99d69a plus the scoped Agent native-system-view mock and FEX-pinned jemalloc 97d98699.",
+      "assetPath": "fexcore/fexcore-2508-wowbox-mainline-7519b960-2beba31f.tzst",
+      "filename": "fexcore-2508-wowbox-mainline-7519b960-2beba31f.tzst",
+      "sha256": "2beba31f8d0f32c192433f1cd0f8d73e53799e330203d0c7d0d11a883e98ed9d",
+      "sizeBytes": 1593352,
+      "tag": "v0.2.0-preview",
+      "sourceRef": "FrontMage/Proton 212f9e729f7f79a582aa1def2d313f21b4c2181c, FrontMage/FEX 7519b9605209e9e19eaf7be669dae7c1848fe5f1.",
       "status": "candidate",
-      "notes": "Public Linux/Android runtime component used by the standard WoW Box release."
+      "notes": "Pinned mainline source; release candidate pending device acceptance."
     },
     {
       "role": "dx-wrapper-stack",

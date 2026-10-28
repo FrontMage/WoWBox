@@ -54,7 +54,7 @@ public class DrawableManager extends XResourceManager implements XResourceManage
         }
 
         final Texture texture = drawable.getTexture();
-        if (texture != null) xServer.getRenderer().xServerView.queueEvent(texture::destroy);
+        if (texture != null) xServer.getRenderer().getRendererView().queueEvent(texture::destroy);
 
         Callback<Drawable> onDestroyListener = drawable.getOnDestroyListener();
         if (onDestroyListener != null) onDestroyListener.call(drawable);
@@ -87,7 +87,7 @@ public class DrawableManager extends XResourceManager implements XResourceManage
 //import android.util.SparseArray;
 //
 //import com.winlator.core.Callback;
-//import com.winlator.renderer.GLRenderer;
+//import com.winlator.renderer.XServerRenderer;
 //import com.winlator.renderer.Texture;
 //import com.winlator.widget.XServerView;
 //
@@ -159,7 +159,7 @@ public class DrawableManager extends XResourceManager implements XResourceManage
 //        if (texture != null) {
 //            // The new Smali code calls a synthetic lambda from VortekRendererComponent
 //            // which presumably destroys or cleans up the texture. Here, we replicate that:
-//            GLRenderer renderer = xServer.getRenderer();
+//            XServerRenderer renderer = xServer.getRenderer();
 //            XServerView xServerView = renderer.xServerView;
 //
 //            Objects.requireNonNull(texture);

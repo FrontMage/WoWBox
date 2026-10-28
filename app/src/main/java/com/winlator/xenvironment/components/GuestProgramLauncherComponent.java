@@ -11,7 +11,9 @@ import android.util.Log;
 
 import androidx.preference.PreferenceManager;
 
+import com.winlator.BuildConfig;
 import com.winlator.box.BoxRuntime;
+import com.winlator.box.RenderDocCaptureManager;
 import com.winlator.contents.AdrenotoolsManager;
 import com.winlator.core.Callback;
 import com.winlator.core.DefaultVersion;
@@ -353,7 +355,7 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
             envVars.put("PROTON_VIDEO_CONVERT", "0");
             envVars.put("PROTON_DEMUX", "0");
 
-            envVars.put("PATH", wineBinPath + ":" + rootPath + "/usr/bin");
+            envVars.put("PATH", wineBinPath + ":" + rootPath + "/usr/bin:/system/bin:/system/xbin");
             envVars.put(
                     "LD_LIBRARY_PATH",
                     rootPath + "/usr/lib" + ":/system/lib64"
@@ -445,7 +447,9 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
             // Bionic Wine uses Android's libc/libdl/libm and the bionic X11/audio
             // compatibility libraries from the selected imagefs.
             envVars.put("LD_LIBRARY_PATH", "/system/lib64:" + rootPath + "/usr/lib");
-            envVars.put("PATH", wineBinPath + ":" + rootPath + "/usr/bin");
+            // Bionic libraries may invoke Android tools such as getprop.
+            // Keep the selected Wine/imagefs programs first in lookup order.
+            envVars.put("PATH", wineBinPath + ":" + rootPath + "/usr/bin:/system/bin:/system/xbin");
             // Allow overriding WoW64 backend via env. Default is FEX's WoW64 bridge.
             // If the user sets HODLL (e.g. wowbox64.dll), don't clobber it.
             if (!envVars.has("HODLL") || envVars.get("HODLL") == null || envVars.get("HODLL").isEmpty()) {
@@ -456,6 +460,12 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
             // Inject Adrenotools so the wrapper can load the selected Turnip asset.
             new AdrenotoolsManager(context).setDriverById(envVars, imageFs,
                     BoxRuntime.get(context).getGpuDriverId());
+        }
+
+        // The UU Box preference owns capture activation after every environment merge.
+        // Legacy /env and launch debug overrides cannot silently re-enable it.
+        if (BuildConfig.UU_PROBE_BUILD && boxMode && isArm64ecWine) {
+            new RenderDocCaptureManager(context).applyLaunchEnvironment(envVars, isArm64ecWine);
         }
 
         boolean bindSHM = envVars.get("WINEESYNC").equals("1");

@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "version": "v0.1.0",
+  "version": "v0.2.0-preview",
   "bundle": {
-    "filename": "WoWBox-v0.1.0-runtime-assets.tar.gz",
-    "url": "https://github.com/FrontMage/WoWBox/releases/download/v0.1.0/WoWBox-v0.1.0-runtime-assets.tar.gz",
-    "sha256": "f22618a7e425ac60e3f27d8423787268f20527fee48539d46b3e00ca22ad7600"
+    "filename": "WoWBox-v0.2.0-preview-runtime-assets.tar.gz",
+    "url": "https://github.com/FrontMage/WoWBox/releases/download/v0.2.0-preview/WoWBox-v0.2.0-preview-runtime-assets.tar.gz",
+    "sha256": "89cc2606bde1e8b01d986adc45f7f24fd859c5a9cf043586f798dc9660c3464f"
   },
   "files": [
     {
       "path": "app/src/main/assets/box_spec.json",
-      "sha256": "bb8cd604552bd3bcc7f2bafc84daf7f488ab3f5ab47848d1a1150d360947074c",
-      "sizeBytes": 9633,
+      "sha256": "a9ef5502f38307771132cb18cd1d2cdd8657927a33dcdc3826228285e32ef367",
+      "sizeBytes": 9877,
       "mode": 420
     },
     {
@@ -62,9 +62,9 @@
       "mode": 420
     },
     {
-      "path": "app/src/main/assets/fexcore/fexcore-2508-frontmage-bnet-99d69a-native-mock-jemalloc-5f1dbc8d.tzst",
-      "sha256": "5f1dbc8db81adcbcc25e1e4119b8bb16d4abbeb8d37b06a95249764e21edeae3",
-      "sizeBytes": 1588283,
+      "path": "app/src/main/assets/fexcore/fexcore-2508-wowbox-mainline-7519b960-2beba31f.tzst",
+      "sha256": "2beba31f8d0f32c192433f1cd0f8d73e53799e330203d0c7d0d11a883e98ed9d",
+      "sizeBytes": 1593352,
       "mode": 420
     },
     {
@@ -315,8 +315,8 @@
     },
     {
       "path": "app/src/main/assets/managed_assets.json",
-      "sha256": "02304daedd8126b65471c69f73c8dd4e2463e8e1f36f19f8acf68c9ee66bd39e",
-      "sizeBytes": 10124,
+      "sha256": "4a19812d6f1ffef6649a32620685ae4e7a3ca49255ae39a1b4b2a127a6eb1c33",
+      "sizeBytes": 10167,
       "mode": 420
     },
     {
@@ -329,31 +329,31 @@
       "path": "app/src/main/assets/rootfs-utils/aarch64/bin/cat",
       "sha256": "33b060a650016e94118597563f7fffc2df97c0cad27b6a30bae0e97d9b0a2fe8",
       "sizeBytes": 572496,
-      "mode": 493
+      "mode": 420
     },
     {
       "path": "app/src/main/assets/rootfs-utils/aarch64/usr/bin/cat",
       "sha256": "33b060a650016e94118597563f7fffc2df97c0cad27b6a30bae0e97d9b0a2fe8",
       "sizeBytes": 572496,
-      "mode": 493
+      "mode": 420
     },
     {
       "path": "app/src/main/assets/rootfs-utils/aarch64/usr/bin/env",
       "sha256": "5fce7256dcfd208aebbf9908b52384f0abc64385a6f0fe746cb4a15647694746",
       "sizeBytes": 576592,
-      "mode": 493
+      "mode": 420
     },
     {
       "path": "app/src/main/assets/rootfs-utils/aarch64/usr/bin/lscpu",
       "sha256": "49e21552ba9ba8fb00b662d14012083c89ceaeab2ccdaba2000732d888f10aea",
       "sizeBytes": 576592,
-      "mode": 493
+      "mode": 420
     },
     {
       "path": "app/src/main/assets/rootfs-utils/aarch64/usr/lib/alsa-lib/libasound_module_pcm_android_aserver.so",
       "sha256": "a1464775e79160d399c806f2935d8d76159ffa0e9c6a9797320705922580032a",
       "sizeBytes": 30984,
-      "mode": 493
+      "mode": 420
     },
     {
       "path": "app/src/main/assets/wincomponents/wincomponents.json",
@@ -368,15 +368,27 @@
       "mode": 420
     },
     {
-      "path": "app/src/main/assets/wine-runtime-wowbox-openfonts-9ac94fff.txz",
-      "sha256": "9ac94fff85c5156e0179e1e11508b1cbb569d4f974bca8838df319327c6f291d",
-      "sizeBytes": 258510052,
+      "path": "app/src/main/assets/wine-runtime-wowbox-mainline-openfonts-086c3fe6.txz",
+      "sha256": "086c3fe69c60493c2a43c9625a3b4d755bff2d6ebc3f44e02a0c85f49cc6efd6",
+      "sizeBytes": 143881768,
       "mode": 420
     },
     {
       "path": "app/src/main/assets/wine_debug_channels.json",
       "sha256": "c29ca750c8ad4557aba5f27d218dfec5f0f14c3befad7a81b59c7cb28f53cebc",
       "sizeBytes": 4874,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/wine_prefix_delta/wowbox-v010-to-mainline.json",
+      "sha256": "01dbef7048c506116d4b4232063706f99dc139f99b3c6b967e92baa11c443fa6",
+      "sizeBytes": 654368,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/wine_runtime_baseline/wowbox-v010-tree.json",
+      "sha256": "663594b4f47ef62696993751cc8512d084f449530cbdfd5a084d8862dee63311",
+      "sizeBytes": 428034,
       "mode": 420
     },
     {
@@ -389,25 +401,25 @@
       "path": "app/src/main/assets/winhandler/frontmage-wow-launcher.exe",
       "sha256": "384987b6e0deaacac2fadc9eb3541a3fb864a7cfe19eab56899e93f3d9e1e282",
       "sizeBytes": 39936,
-      "mode": 493
+      "mode": 420
     },
     {
       "path": "app/src/main/assets/winhandler/ime-contract-probe-amd64.exe",
       "sha256": "666cffff5cc57607202d37938e622f19c0248cea4816d66741b16654bddadc39",
       "sizeBytes": 98816,
-      "mode": 493
+      "mode": 420
     },
     {
       "path": "app/src/main/assets/winhandler/ime-contract-probe-arm64.exe",
       "sha256": "71fc0d52355a75b5869605596df894002e57d52cf66d55158a1704dc9e7503d7",
       "sizeBytes": 96256,
-      "mode": 493
+      "mode": 420
     },
     {
       "path": "app/src/main/assets/winhandler/winhandler-lite.exe",
       "sha256": "9b41b1f7e900b5e25e0a820c4138759ce2a37979323cfa87822adb67d667204f",
       "sizeBytes": 120320,
-      "mode": 493
+      "mode": 420
     },
     {
       "path": "app/src/main/assets/winhandler/winhandler-xinput-wow-filtered-arm64x-437d6859.tzst",

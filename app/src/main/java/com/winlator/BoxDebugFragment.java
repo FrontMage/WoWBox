@@ -1,8 +1,10 @@
 package com.winlator;
 
 import android.os.Bundle;
+import android.os.Build;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -12,6 +14,7 @@ import androidx.fragment.app.Fragment;
 import com.winlator.box.BoxDebugServer;
 import com.winlator.box.BoxPaths;
 import com.winlator.box.BoxRuntime;
+import com.winlator.box.BoxSafeSnapshot;
 import com.winlator.core.FileUtils;
 
 import org.json.JSONException;
@@ -66,10 +69,24 @@ public class BoxDebugFragment extends Fragment {
 
     private void exportSnapshot() {
         File exportDir = BoxPaths.getStateExportDir(runtime.getSpec());
-        exportDir.mkdirs();
+        if (!exportDir.isDirectory() && !exportDir.mkdirs()) {
+            Toast.makeText(requireContext(), R.string.box_snapshot_export_failed, Toast.LENGTH_LONG).show();
+            return;
+        }
         String timestamp = new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date());
         File file = new File(exportDir, "snapshot-" + timestamp + ".json");
-        FileUtils.writeString(file, runtime.buildDebugSnapshot().toString());
+        try {
+            String summary = BoxSafeSnapshot.create(runtime.buildDebugSnapshot(), BuildConfig.VERSION_NAME,
+                    Build.VERSION.SDK_INT).toString(2);
+            if (!FileUtils.writeString(file, summary)) {
+                Toast.makeText(requireContext(), R.string.box_snapshot_export_failed, Toast.LENGTH_LONG).show();
+                return;
+            }
+            Toast.makeText(requireContext(), R.string.box_snapshot_exported_safe, Toast.LENGTH_LONG).show();
+        }
+        catch (JSONException e) {
+            Toast.makeText(requireContext(), R.string.box_snapshot_export_failed, Toast.LENGTH_LONG).show();
+        }
         refresh();
     }
 }

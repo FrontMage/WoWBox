@@ -150,6 +150,7 @@ public class BoxSpec {
         public String replacePolicy = "replace";
         public String winePrefixDeltaManifest = "";
         public String winePrefixDeltaChecksum = "";
+        public String wineBuiltinCompilerSha256 = "";
         public final ArrayList<String> capabilities = new ArrayList<>();
 
         public static Layer fromJson(JSONObject json) {
@@ -163,6 +164,7 @@ public class BoxSpec {
             layer.replacePolicy = json.optString("replacePolicy", "replace");
             layer.winePrefixDeltaManifest = json.optString("winePrefixDeltaManifest", "");
             layer.winePrefixDeltaChecksum = json.optString("winePrefixDeltaChecksum", "");
+            layer.wineBuiltinCompilerSha256 = json.optString("wineBuiltinCompilerSha256", "");
             JSONArray capabilities = json.optJSONArray("capabilities");
             if (capabilities != null) {
                 for (int i = 0; i < capabilities.length(); i++) {
@@ -183,6 +185,7 @@ public class BoxSpec {
             json.put("replacePolicy", replacePolicy);
             json.put("winePrefixDeltaManifest", winePrefixDeltaManifest);
             json.put("winePrefixDeltaChecksum", winePrefixDeltaChecksum);
+            json.put("wineBuiltinCompilerSha256", wineBuiltinCompilerSha256);
             JSONArray capabilitiesJson = new JSONArray();
             for (String capability : capabilities) capabilitiesJson.put(capability);
             json.put("capabilities", capabilitiesJson);

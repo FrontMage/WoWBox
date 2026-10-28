@@ -26,9 +26,10 @@ public class ControlsProfile implements Comparable<ControlsProfile> {
     private final List<ControlElement> immutableElements = Collections.unmodifiableList(elements);
     private boolean elementsLoaded = false;
     private boolean controllersLoaded = false;
-    private boolean virtualGamepad = false;
+    private volatile boolean virtualGamepad = false;
+    private boolean gamepadClassificationReady = false;
     private final Context context;
-    private GamepadState gamepadState;
+    private final GamepadState gamepadState = new GamepadState();
 
     public ControlsProfile(Context context, int id) {
         this.context = context;
@@ -56,8 +57,41 @@ public class ControlsProfile implements Comparable<ControlsProfile> {
     }
 
     public GamepadState getGamepadState() {
-        if (gamepadState == null) gamepadState = new GamepadState();
         return gamepadState;
+    }
+
+    /** Classify before publication without requiring a laid-out/drawn view. */
+    public void prepareForUse() {
+        if (gamepadClassificationReady) return;
+        boolean classified = false;
+        File file = getProfileFile(context, id);
+        try {
+            if (file.isFile()) {
+                JSONArray rows = new JSONObject(FileUtils.readString(file)).getJSONArray("elements");
+                for (int i = 0; i < rows.length(); i++) {
+                    if (isVirtualGamepadElement(readBindings(rows.getJSONObject(i).getJSONArray("bindings")))) {
+                        classified = true;
+                        break;
+                    }
+                }
+            }
+        }
+        catch (JSONException | IllegalArgumentException e) {
+            e.printStackTrace();
+        }
+        virtualGamepad = classified;
+        gamepadClassificationReady = true;
+    }
+
+    static boolean isVirtualGamepadElement(Binding[] bindings) {
+        for (Binding binding : bindings) if (!binding.isGamepad()) return false;
+        return true;
+    }
+
+    private static Binding[] readBindings(JSONArray rows) throws JSONException {
+        Binding[] bindings = new Binding[rows.length()];
+        for (int i = 0; i < rows.length(); i++) bindings[i] = Binding.fromString(rows.getString(i));
+        return bindings;
     }
 
     public ExternalController addController(String id) {
@@ -195,7 +229,7 @@ public class ControlsProfile implements Comparable<ControlsProfile> {
     public void loadElements(InputControlsView inputControlsView) {
         elements.clear();
         elementsLoaded = false;
-        virtualGamepad = false;
+        boolean loadedVirtualGamepad = false;
 
         File file = getProfileFile(context, id);
         if (!file.isFile()) return;
@@ -217,17 +251,16 @@ public class ControlsProfile implements Comparable<ControlsProfile> {
                 if (elementJSONObject.has("range")) element.setRange(ControlElement.Range.valueOf(elementJSONObject.getString("range")));
                 if (elementJSONObject.has("orientation")) element.setOrientation((byte)elementJSONObject.getInt("orientation"));
 
-                boolean hasGamepadBinding = true;
-                JSONArray bindingsJSONArray = elementJSONObject.getJSONArray("bindings");
-                for (int j = 0; j < bindingsJSONArray.length(); j++) {
-                    Binding binding = Binding.fromString(bindingsJSONArray.getString(j));
-                    element.setBindingAt(j, Binding.fromString(bindingsJSONArray.getString(j)));
-                    if (!binding.isGamepad()) hasGamepadBinding = false;
+                Binding[] bindings = readBindings(elementJSONObject.getJSONArray("bindings"));
+                for (int j = 0; j < bindings.length; j++) {
+                    element.setBindingAt(j, bindings[j]);
                 }
 
-                if (!virtualGamepad && hasGamepadBinding) virtualGamepad = true;
+                if (isVirtualGamepadElement(bindings)) loadedVirtualGamepad = true;
                 elements.add(element);
             }
+            virtualGamepad = loadedVirtualGamepad;
+            gamepadClassificationReady = true;
             elementsLoaded = true;
         }
         catch (JSONException e) {

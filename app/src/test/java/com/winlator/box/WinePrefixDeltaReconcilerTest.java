@@ -153,6 +153,169 @@ public class WinePrefixDeltaReconcilerTest {
     }
 
     @Test
+    public void freshPrefixSeedsMissingFilesBeforeStrictReconcile() throws Exception {
+        Fixture f = fixture();
+        WinePrefixDeltaReconciler.Entry first = f.entry("system32/ntdll.dll",
+                "lib/wine/aarch64-windows/ntdll.dll", "old-a", "new-a");
+        WinePrefixDeltaReconciler.Entry second = f.entry("sysarm32/kernel32.dll",
+                "lib/wine/aarch64-windows/kernel32.dll", "old-b", "new-b");
+        assertTrue(new File(f.windows, "sysarm32/kernel32.dll").delete());
+        WinePrefixDeltaReconciler.seedFreshMissing(f.runtime, f.windows, Arrays.asList(first, second));
+        assertEquals("old-a", f.read("system32/ntdll.dll"));
+        assertEquals("new-b", f.read("sysarm32/kernel32.dll"));
+        WinePrefixDeltaReconciler.reconcile(f.runtime, f.windows, Arrays.asList(first, second));
+        assertEquals("new-a", f.read("system32/ntdll.dll"));
+        assertEquals("new-b", f.read("sysarm32/kernel32.dll"));
+    }
+
+    @Test
+    public void freshPrefixRejectsUnknownBeforeSeedingAnything() throws Exception {
+        Fixture f = fixture();
+        WinePrefixDeltaReconciler.Entry first = f.entry("system32/ntdll.dll",
+                "lib/wine/aarch64-windows/ntdll.dll", "old-a", "new-a");
+        WinePrefixDeltaReconciler.Entry second = f.entry("sysarm32/kernel32.dll",
+                "lib/wine/aarch64-windows/kernel32.dll", "old-b", "new-b");
+        f.writePrefix("system32/ntdll.dll", "third-party");
+        assertTrue(new File(f.windows, "sysarm32/kernel32.dll").delete());
+        try {
+            WinePrefixDeltaReconciler.seedFreshMissing(f.runtime, f.windows, Arrays.asList(first, second));
+            fail("Unknown destination must fail before writing");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage().contains("Unknown fresh"));
+        }
+        assertEquals("third-party", f.read("system32/ntdll.dll"));
+        assertTrue(!new File(f.windows, "sysarm32/kernel32.dll").exists());
+    }
+
+    @Test
+    public void verifiedAlternativeBaselineMayBeUpdated() throws Exception {
+        Fixture f = fixture();
+        WinePrefixDeltaReconciler.Entry first = f.entry("system32/iexplore.exe",
+                "lib/wine/aarch64-windows/iexplore.exe", "baseline-a", "candidate");
+        File alternate = f.writePrefix("system32/iexplore.exe", "baseline-b");
+        WinePrefixDeltaReconciler.Entry entry = new WinePrefixDeltaReconciler.Entry(
+                first.prefixPath, first.runtimePath, first.baselineSha256, first.candidateSha256,
+                Collections.singletonList(WinePrefixDeltaReconciler.sha256(alternate)));
+        WinePrefixDeltaReconciler.reconcile(f.runtime, f.windows, Collections.singletonList(entry));
+        assertEquals("candidate", f.read("system32/iexplore.exe"));
+    }
+
+    @Test
+    public void winebootOptionalMayBeAbsentOrCandidateButNotUnknown() throws Exception {
+        Fixture f = fixture();
+        WinePrefixDeltaReconciler.Entry initial = f.entry("system32/fusion.dll",
+                "lib/wine/aarch64-windows/fusion.dll", "old", "candidate");
+        WinePrefixDeltaReconciler.Entry optional = new WinePrefixDeltaReconciler.Entry(
+                initial.prefixPath, initial.runtimePath, initial.baselineSha256,
+                initial.candidateSha256, Collections.emptyList(), true);
+        File target = new File(f.windows, initial.prefixPath);
+        assertTrue(target.delete());
+        assertTrue(WinePrefixDeltaReconciler.candidateStateMatches(f.windows, Collections.singletonList(optional)));
+        WinePrefixDeltaReconciler.reconcile(f.runtime, f.windows, Collections.singletonList(optional));
+        assertTrue(!target.exists());
+        f.writePrefix(initial.prefixPath, "candidate");
+        assertTrue(WinePrefixDeltaReconciler.candidateStateMatches(f.windows, Collections.singletonList(optional)));
+        f.writePrefix(initial.prefixPath, "third-party");
+        assertTrue(!WinePrefixDeltaReconciler.candidateStateMatches(f.windows, Collections.singletonList(optional)));
+        try { WinePrefixDeltaReconciler.reconcile(f.runtime, f.windows, Collections.singletonList(optional)); fail(); }
+        catch (IllegalStateException expected) { assertTrue(expected.getMessage().contains("unknown destination")); }
+        assertEquals("third-party", f.read(initial.prefixPath));
+    }
+
+    @Test
+    public void optionalNeverPermitsDanglingSymlinkOrOtherFiles() throws Exception {
+        Fixture f = fixture();
+        WinePrefixDeltaReconciler.Entry initial = f.entry("syswow64/comctl32_v6.dll",
+                "lib/wine/i386-windows/comctl32_v6.dll", "old", "candidate");
+        WinePrefixDeltaReconciler.Entry optional = new WinePrefixDeltaReconciler.Entry(
+                initial.prefixPath, initial.runtimePath, initial.baselineSha256,
+                initial.candidateSha256, Collections.emptyList(), true);
+        File target = new File(f.windows, initial.prefixPath);
+        assertTrue(target.delete());
+        Files.createSymbolicLink(target.toPath(), java.nio.file.Paths.get("missing-target"));
+        assertTrue(!WinePrefixDeltaReconciler.candidateStateMatches(f.windows, Collections.singletonList(optional)));
+        try { WinePrefixDeltaReconciler.reconcile(f.runtime, f.windows, Collections.singletonList(optional)); fail(); }
+        catch (IllegalArgumentException | IllegalStateException expected) { /* fail closed */ }
+        try {
+            new WinePrefixDeltaReconciler.Entry("sysarm32/fusion.dll", initial.runtimePath,
+                    initial.baselineSha256, initial.candidateSha256, Collections.emptyList(), true);
+            fail("sysarm32 is not authorized for removal");
+        } catch (IllegalArgumentException expected) { /* exact allowlist */ }
+    }
+
+    @Test
+    public void freshSeedDoesNotMaterializeOptionalMissingFiles() throws Exception {
+        Fixture f = fixture();
+        WinePrefixDeltaReconciler.Entry initial = f.entry("system32/ngen.exe",
+                "lib/wine/aarch64-windows/ngen.exe", "old", "candidate");
+        WinePrefixDeltaReconciler.Entry optional = new WinePrefixDeltaReconciler.Entry(
+                initial.prefixPath, initial.runtimePath, initial.baselineSha256,
+                initial.candidateSha256, Collections.emptyList(), true);
+        assertTrue(new File(f.windows, initial.prefixPath).delete());
+        WinePrefixDeltaReconciler.seedFreshMissing(f.runtime, f.windows, Collections.singletonList(optional));
+        assertTrue(!new File(f.windows, initial.prefixPath).exists());
+    }
+
+    @Test
+    public void interruptedRollbackHandlesOptionalMissingEntry() throws Exception {
+        Fixture f = fixture();
+        WinePrefixDeltaReconciler.Entry first = f.entry("system32/ntdll.dll",
+                "lib/wine/aarch64-windows/ntdll.dll", "old-a", "new-a");
+        WinePrefixDeltaReconciler.Entry second = f.entry("syswow64/kernel32.dll",
+                "lib/wine/i386-windows/kernel32.dll", "old-b", "new-b");
+        WinePrefixDeltaReconciler.Entry initial = f.entry("system32/fusion.dll",
+                "lib/wine/aarch64-windows/fusion.dll", "old-f", "new-f");
+        WinePrefixDeltaReconciler.Entry optional = new WinePrefixDeltaReconciler.Entry(
+                initial.prefixPath, initial.runtimePath, initial.baselineSha256,
+                initial.candidateSha256, Collections.emptyList(), true);
+        assertTrue(new File(f.windows, initial.prefixPath).delete());
+        f.writePrefix("system32/ntdll.dll.wine-delta-backup", "old-a");
+        f.writePrefix("system32/ntdll.dll", "new-a");
+        f.writePrefix("syswow64/kernel32.dll.wine-delta-new", "new-b");
+        WinePrefixDeltaReconciler.reconcile(f.runtime, f.windows, Arrays.asList(first, second, optional));
+        assertEquals("new-a", f.read(first.prefixPath));
+        assertEquals("new-b", f.read(second.prefixPath));
+        assertTrue(!new File(f.windows, optional.prefixPath).exists());
+    }
+
+    @Test
+    public void interruptedStagingWithAlreadyCurrentEntryCanRetry() throws Exception {
+        Fixture f = fixture();
+        WinePrefixDeltaReconciler.Entry first = f.entry("system32/ntdll.dll",
+                "lib/wine/aarch64-windows/ntdll.dll", "old-a", "new-a");
+        WinePrefixDeltaReconciler.Entry second = f.entry("syswow64/kernel32.dll",
+                "lib/wine/i386-windows/kernel32.dll", "old-b", "new-b");
+        f.writePrefix(first.prefixPath, "new-a");
+        f.writePrefix(second.prefixPath + ".wine-delta-new", "new-b");
+        WinePrefixDeltaReconciler.reconcile(f.runtime, f.windows, Arrays.asList(first, second));
+        assertEquals("new-a", f.read(first.prefixPath));
+        assertEquals("new-b", f.read(second.prefixPath));
+        assertTrue(!new File(f.windows, second.prefixPath + ".wine-delta-new").exists());
+    }
+
+    @Test
+    public void mixedActivationWithCandidateMissingBackupFailsBeforeAnyRollback() throws Exception {
+        Fixture f = fixture();
+        WinePrefixDeltaReconciler.Entry first = f.entry("system32/ntdll.dll",
+                "lib/wine/aarch64-windows/ntdll.dll", "old-a", "new-a");
+        WinePrefixDeltaReconciler.Entry second = f.entry("syswow64/kernel32.dll",
+                "lib/wine/i386-windows/kernel32.dll", "old-b", "new-b");
+        WinePrefixDeltaReconciler.Entry third = f.entry("system32/advapi32.dll",
+                "lib/wine/aarch64-windows/advapi32.dll", "old-c", "new-c");
+        f.writePrefix(first.prefixPath, "new-a"); // Could be initially current or have a lost backup.
+        f.writePrefix(second.prefixPath, "new-b");
+        f.writePrefix(second.prefixPath + ".wine-delta-backup", "old-b");
+        f.writePrefix(third.prefixPath + ".wine-delta-new", "new-c");
+        try { WinePrefixDeltaReconciler.reconcile(f.runtime, f.windows, Arrays.asList(first, second, third)); fail(); }
+        catch (IllegalStateException expected) { assertTrue(expected.getMessage().contains("without backup")); }
+        assertEquals("new-a", f.read(first.prefixPath));
+        assertEquals("new-b", f.read(second.prefixPath));
+        assertEquals("old-b", f.read(second.prefixPath + ".wine-delta-backup"));
+        assertEquals("old-c", f.read(third.prefixPath));
+        assertEquals("new-c", f.read(third.prefixPath + ".wine-delta-new"));
+    }
+
+    @Test
     public void interruptedPartialActivationIsRolledBackAndRetried() throws Exception {
         Fixture fixture = fixture();
         WinePrefixDeltaReconciler.Entry first = fixture.entry(

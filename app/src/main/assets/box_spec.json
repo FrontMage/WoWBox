@@ -49,16 +49,21 @@
       "archive": "tzst",
       "checksum": "350c6f287ef2008e62439a00f67affc0ef650a7ec2c2b7e8d0bea89e47c2f05a",
       "target": "/home/xuser-box",
-      "replacePolicy": "preserve"
+      "replacePolicy": "preserve",
+      "winePrefixDeltaManifest": "asset://wine_prefix_delta/wowbox-v010-to-mainline.json",
+      "winePrefixDeltaChecksum": "01dbef7048c506116d4b4232063706f99dc139f99b3c6b967e92baa11c443fa6"
     },
     {
       "type": "wine-runtime",
-      "source": "asset://wine-runtime-wowbox-openfonts-9ac94fff.txz",
+      "source": "asset://wine-runtime-wowbox-mainline-openfonts-086c3fe6.txz",
       "runtimeIdentifier": "proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff",
       "archive": "txz",
-      "checksum": "9ac94fff85c5156e0179e1e11508b1cbb569d4f974bca8838df319327c6f291d",
+      "checksum": "086c3fe69c60493c2a43c9625a3b4d755bff2d6ebc3f44e02a0c85f49cc6efd6",
       "target": "/opt/proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff",
-      "replacePolicy": "preserve"
+      "replacePolicy": "replace",
+      "capabilities": [
+        "amd64-driver-host"
+      ]
     },
     {
       "type": "input-bridge-stack",
@@ -92,11 +97,11 @@
     },
     {
       "type": "cpu-emu-stack",
-      "source": "asset://fexcore/fexcore-2508-frontmage-bnet-99d69a-native-mock-jemalloc-5f1dbc8d.tzst",
+      "source": "asset://fexcore/fexcore-2508-wowbox-mainline-7519b960-2beba31f.tzst",
       "archive": "tzst",
-      "checksum": "5f1dbc8db81adcbcc25e1e4119b8bb16d4abbeb8d37b06a95249764e21edeae3",
+      "checksum": "2beba31f8d0f32c192433f1cd0f8d73e53799e330203d0c7d0d11a883e98ed9d",
       "target": "/",
-      "replacePolicy": "preserve"
+      "replacePolicy": "replace"
     }
   ],
   "payload": {
@@ -278,7 +283,7 @@
   },
   "debugServer": {
     "enabled": true,
-    "bind": "0.0.0.0",
+    "bind": "127.0.0.1",
     "port": 39090
   }
 }

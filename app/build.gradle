@@ -314,9 +314,10 @@ android {
         applicationId uuProbeBuild ? 'com.blizzard.diablo.immortal' : 'com.winlator.llm'
         minSdkVersion 26
         targetSdkVersion 28
-        versionCode 17
-        versionName "0.1.0"
+        versionCode 18
+        versionName "0.2.0-preview"
         buildConfigField 'boolean', 'UU_PROBE_BUILD', uuProbeBuild.toString()
+        buildConfigField 'boolean', 'NATIVE_ARM_BOX', 'false'
         buildConfigField 'boolean', 'AGENT_DRIVE_PROBE_BUILD', agentDriveProbeBuild.toString()
         buildConfigField 'boolean', 'MINIMAL_ASSETS_BUILD', minimalAssetsBuild.toString()
         buildConfigField 'String', 'MINIMAL_SPEC_ASSET', "\"${minimalAssetsBuild ? selectedMinimalSpec : ''}\""
@@ -378,4 +379,7 @@ dependencies {
     implementation 'org.tukaani:xz:1.7'
     implementation 'org.apache.commons:commons-compress:1.20'
     testImplementation 'junit:junit:4.13.2'
+    // Unit-test JSON implementation; org.json POM declares Public Domain.
+    // Android provides org.json in production, so this does not enter the APK.
+    testImplementation 'org.json:json:20240303'
 }

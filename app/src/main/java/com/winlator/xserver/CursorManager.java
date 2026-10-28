@@ -2,7 +2,7 @@ package com.winlator.xserver;
 
 import android.util.SparseArray;
 
-import com.winlator.renderer.GLRenderer;
+import com.winlator.renderer.XServerRenderer;
 import com.winlator.renderer.Texture;
 
 import java.nio.ByteOrder;
@@ -158,8 +158,8 @@ public class CursorManager extends XResourceManager {
     private void destroyCursorTexture(Drawable image) {
         Texture texture = image.getTexture();
         if (texture == null || !texture.isAllocated()) return;
-        GLRenderer renderer = xServer.getRenderer();
-        if (renderer != null) renderer.xServerView.queueEvent(texture::destroy);
+        XServerRenderer renderer = xServer.getRenderer();
+        if (renderer != null) renderer.getRendererView().queueEvent(texture::destroy);
     }
 
     private static boolean isEmptyMaskImage(Drawable maskImage) {

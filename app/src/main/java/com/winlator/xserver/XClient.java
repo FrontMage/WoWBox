@@ -5,6 +5,7 @@ import androidx.collection.ArrayMap;
 import com.winlator.xconnector.XInputStream;
 import com.winlator.xconnector.XOutputStream;
 import com.winlator.xserver.events.Event;
+import com.winlator.xserver.extensions.PresentExtension;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -74,6 +75,8 @@ public class XClient implements XResourceManager.OnResourceLifecycleListener {
 
     public void freeResources() {
         try (XLock lock = xServer.lockAll()) {
+            PresentExtension presentExtension = xServer.getExtension(PresentExtension.MAJOR_OPCODE);
+            if (presentExtension != null) presentExtension.freeClientEvents(this);
             while (!resources.isEmpty()) {
                 XResource resource = resources.remove(resources.size()-1);
                 if (resource instanceof Window) {

@@ -20,13 +20,13 @@
 
 仓库级说明见：
 
-- [docs/WINLATOR_BOX.md](/Users/xinbiguo/Documents/winlator-mod/docs/WINLATOR_BOX.md)
+- [docs/WINLATOR_BOX.md](../../../../../../../docs/WINLATOR_BOX.md)
 
 ## Class Map
 
 ### `BoxSpec`
 
-[BoxSpec.java](/Users/xinbiguo/Documents/winlator-mod/app/src/main/java/com/winlator/box/BoxSpec.java)
+[BoxSpec.java](../../../../../../../app/src/main/java/com/winlator/box/BoxSpec.java)
 
 唯一真相源，描述：
 
@@ -39,11 +39,11 @@
 
 当前默认 spec 资产在：
 
-- [app/src/main/assets/box_spec.json](/Users/xinbiguo/Documents/winlator-mod/app/src/main/assets/box_spec.json)
+- [app/src/main/assets/box_spec.json](../../../../../../../app/src/main/assets/box_spec.json)
 
 ### `BoxInstaller`
 
-[BoxInstaller.java](/Users/xinbiguo/Documents/winlator-mod/app/src/main/java/com/winlator/box/BoxInstaller.java)
+[BoxInstaller.java](../../../../../../../app/src/main/java/com/winlator/box/BoxInstaller.java)
 
 负责固定顺序安装：
 
@@ -64,7 +64,7 @@
 
 ### `BoxRuntime`
 
-[BoxRuntime.java](/Users/xinbiguo/Documents/winlator-mod/app/src/main/java/com/winlator/box/BoxRuntime.java)
+[BoxRuntime.java](../../../../../../../app/src/main/java/com/winlator/box/BoxRuntime.java)
 
 负责：
 
@@ -85,7 +85,7 @@
 
 ### `BoxDebugServer`
 
-[BoxDebugServer.java](/Users/xinbiguo/Documents/winlator-mod/app/src/main/java/com/winlator/box/BoxDebugServer.java)
+[BoxDebugServer.java](../../../../../../../app/src/main/java/com/winlator/box/BoxDebugServer.java)
 
 提供局域网调试入口：
 
@@ -165,13 +165,13 @@ runner 应先把文件同步到目标路径，再调用 `POST /automation/runtim
 
 仓库内的 stdio MCP 包装在：
 
-- [tools/winlator-box-mcp/server.py](/Users/xinbiguo/Documents/winlator-mod/tools/winlator-box-mcp/server.py)
+- [tools/winlator-box-mcp/server.py](../../../../../../../tools/winlator-box-mcp/server.py)
 
 它只包装 HTTP/WebSocket debug API，暴露 `box_preflight`、`box_foreground`、`box_verify_layers`、`box_launch`、`box_wait_for_events`、`box_processes`、`box_stop_container` 等工具。
 
 ### `BoxSessionManager`
 
-[BoxSessionManager.java](/Users/xinbiguo/Documents/winlator-mod/app/src/main/java/com/winlator/box/BoxSessionManager.java)
+[BoxSessionManager.java](../../../../../../../app/src/main/java/com/winlator/box/BoxSessionManager.java)
 
 负责 session 生命周期与日志落盘。
 
@@ -198,7 +198,7 @@ runner 应先把文件同步到目标路径，再调用 `POST /automation/runtim
 
 ### Private app data
 
-[BoxPaths.java](/Users/xinbiguo/Documents/winlator-mod/app/src/main/java/com/winlator/box/BoxPaths.java)
+[BoxPaths.java](../../../../../../../app/src/main/java/com/winlator/box/BoxPaths.java)
 
 - `files/box/box-spec.json`
 - `files/box/box-state.json`
@@ -218,13 +218,13 @@ runner 应先把文件同步到目标路径，再调用 `POST /automation/runtim
 
 直接关联的 UI：
 
-- [BoxLoadingFragment.java](/Users/xinbiguo/Documents/winlator-mod/app/src/main/java/com/winlator/BoxLoadingFragment.java)
-- [BoxLauncherFragment.java](/Users/xinbiguo/Documents/winlator-mod/app/src/main/java/com/winlator/BoxLauncherFragment.java)
-- [BoxDebugFragment.java](/Users/xinbiguo/Documents/winlator-mod/app/src/main/java/com/winlator/BoxDebugFragment.java)
+- [BoxLoadingFragment.java](../../../../../../../app/src/main/java/com/winlator/BoxLoadingFragment.java)
+- [BoxLauncherFragment.java](../../../../../../../app/src/main/java/com/winlator/BoxLauncherFragment.java)
+- [BoxDebugFragment.java](../../../../../../../app/src/main/java/com/winlator/BoxDebugFragment.java)
 
 以及真实执行入口：
 
-- [XServerDisplayActivity.java](/Users/xinbiguo/Documents/winlator-mod/app/src/main/java/com/winlator/XServerDisplayActivity.java)
+- [XServerDisplayActivity.java](../../../../../../../app/src/main/java/com/winlator/XServerDisplayActivity.java)
 
 `/launch` 应该始终走 `BoxRuntime -> XServerDisplayActivity`，这样：
 
@@ -277,4 +277,4 @@ WoW ARM64 调试默认遵守这几个约束：
 
 相关文档：
 
-- [docs/issues/DXVK_WOW_ARM64_NO_FIRST_FRAME_REPORT.md](/Users/xinbiguo/Documents/winlator-mod/docs/issues/DXVK_WOW_ARM64_NO_FIRST_FRAME_REPORT.md)
+- [docs/issues/DXVK_WOW_ARM64_NO_FIRST_FRAME_REPORT.md](../../../../../../../docs/issues/DXVK_WOW_ARM64_NO_FIRST_FRAME_REPORT.md)

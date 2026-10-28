@@ -63,6 +63,8 @@ public class GPUImage extends Texture {
         needsUpdate = false;
     }
 
+    public long getHardwareBufferPtr() { return hardwareBufferPtr; }
+
     public short getStride() {
         return stride;
     }

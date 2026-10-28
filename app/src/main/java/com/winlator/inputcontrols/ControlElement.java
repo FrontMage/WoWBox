@@ -757,4 +757,21 @@ public class ControlElement {
         }
         return false;
     }
+
+    /** Release ownership without turning a cancellation into a tap or toggle. */
+    public void cancelTouch() {
+        if (type == Type.BUTTON && (currentPointerId != -1 || selected || touchTime != null)) {
+            inputControlsView.handleInputEvent(getBindingAt(0), false);
+        }
+        if (type == Type.RANGE_BUTTON && scroller != null) scroller.cancelTouch();
+        for (int i = 0; i < states.length; i++) {
+            if (states[i]) inputControlsView.handleInputEvent(getBindingAt(i), false);
+            states[i] = false;
+        }
+        currentPointerId = -1;
+        currentPosition = null;
+        touchTime = null;
+        selected = false;
+        inputControlsView.invalidate();
+    }
 }

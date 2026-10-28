@@ -6,19 +6,19 @@
 
 **日常使用不需要 AI 助手、Codex、ADB 或电脑。** 下载 APK 后，按照下面的 Android 界面操作即可。
 
-[下载 v0.1.0 预览版](https://github.com/FrontMage/WoWBox/releases/tag/v0.1.0) · [构建与运行资源](docs/BUILD.md) · [第三方软件和源码](THIRD_PARTY_NOTICES.md)
+[下载 v0.2.0 预览版](https://github.com/FrontMage/WoWBox/releases/tag/v0.2.0-preview) · [构建与运行资源](docs/BUILD.md) · [第三方软件和源码](THIRD_PARTY_NOTICES.md)
 
 ## 设备与版本
 
 - APK 包名为 `com.winlator.llm`，面向 ARM64 Android；最低安装 API 为 Android 8.0。
 - 内置图形栈面向 Qualcomm Adreno。现有开发版本的验证不能推定所有设备、游戏版本都兼容；Mali、Xclipse 和较新的 Adreno 8xx 没有本公开版的通用支持承诺。
 - RP5 的 D3D12 GPU hang，以及长时间稳定性仍有未解决问题。公开版采用共享配置，不包含 Thor、RedMagic、UU 的设备实验配置。
-- 本预览版完成独立构建、签名和资源检查。公开版使用自由字体和 Wine 内置组件，尚未完成这一配置的新设备游戏验收。
-- 首次安装会展开运行资源，预留至少 5 GB 可用空间，并另外准备游戏客户端及更新所需空间。
+- 本版是预览版。具体设备和游戏的测试范围、未覆盖项目及已知问题以本版 Release 说明为准；其他设备的表现可能不同。
+- 首次安装会展开运行资源，建议预留至少 8 GB 可用空间；升级现有运行时建议预留至少 10 GB，游戏客户端和游戏更新需要额外空间。所需空间可能因设备及已有数据而不同。
 
 ## 1. 安装并等待资源初始化
 
-1. 从上面的 Release 下载 **WoWBox-v0.1.0-arm64.apk**。
+1. 从上面的 Release 下载 **WoWBox-v0.2.0-preview-arm64.apk**。
 2. 在 Android 文件管理器打开 APK，按系统提示允许该来源安装应用。
 3. 启动 **WoW Box**，授予存储权限。
 4. 等待 **Box Install** 完成并进入首页。应用会自动创建运行环境、安装 Wine/FEX 和图形资源，无需另建容器或复制 DLL。
@@ -72,7 +72,9 @@ WoW Box 不包含 Battle.net 安装器或游戏文件。
 4. 更新或扫描完成后，在 Battle.net 内点击 **Play / 进入游戏**。
 5. 此后的日常入口是 **WoW Box → Battle.net → 进入游戏**。
 
-首页负责安装和打开 Battle.net；游戏版本、更新、登录和启动由 Battle.net 管理。本版不包含纯 ARM64 WoW Beta 的新 copied-syscall 补丁。
+如果使用当前国服泰坦服，先在 Battle.net 设置中选择游戏启动后保留 Battle.net，再启动游戏。
+
+首页负责安装和打开 Battle.net；游戏版本、更新、登录和启动由 Battle.net 管理。本版使用 Wine 运行战网，不启用战网 relay。
 
 ## 5. 触屏、手柄和键鼠
 
@@ -113,14 +115,15 @@ DLL 不随 APK 分发。导入校验可能不接受不同版本；出现启动�
 
 - 先退出游戏，再在运行菜单选择 **Exit**。
 - Battle.net 无响应时使用 **Exit → 首页 Battle.net** 重新打开。
-- 后续公开版更新应在退出会话后安装同包名、同签名的 APK。
+- 已安装公开版时，退出游戏和容器，再安装同包名、同签名的新 APK；安装时选择更新，保留应用数据。
+- 更新后打开 WoW Box，在首页选择 **Update runtime** 并等待完成，然后启动战网。若提示空间不足，请腾出空间重试；若现有运行时或前缀无法安全识别，应用会保留文件并停止自动更新，不要卸载或清除数据。
 - 安装不同签名的自行构建包前先备份数据；不要通过普通更新操作卸载应用或清除应用数据。
 - 从旧内部开发包迁移时，运行资源身份不同可能触发数据保护检查。不要强制重建已有前缀；先备份再处理迁移。
 - 游戏放在 `D:` 时，可在退出会话后用 Android 文件管理器备份整个目录，尤其是 `WTF` 和 `Interface/AddOns`。
 
 ## 8. 导出故障信息
 
-首页 **Debug → Export Snapshot** 导出配置摘要至：
+首页 **Debug → Export Snapshot** 导出脱敏的简要状态摘要至：
 
 ```text
 内部存储/Download/WinlatorBox/frontmage-bnet-arm64/exports/snapshot-时间.json

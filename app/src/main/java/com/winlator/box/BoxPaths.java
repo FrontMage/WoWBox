@@ -42,10 +42,14 @@ public final class BoxPaths {
     }
 
     public static File getPayloadDir(BoxSpec spec) {
-        if (spec.payload.extractDir != null && !spec.payload.extractDir.isEmpty()) {
-            return new File(spec.payload.extractDir);
-        }
-        return new File(getExternalRoot(spec), "payload");
+        // The packaged default uses /storage/emulated/0 as a portable
+        // identifier, not a cross-user absolute path. Only this exact default
+        // is resolved for the Android user running the app; custom paths stay
+        // byte-for-byte unchanged in the persisted spec.
+        return BoxPublicPayloadPath.resolve(spec.payload.kind, spec.payload.source,
+                spec.payload.extractDir, spec.payload.mountDrive,
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                getExternalRoot(spec));
     }
 
     public static File getLogsDir(BoxSpec spec) {

@@ -7,3 +7,5 @@ app/src/main/java/** -whitespace
 app/src/main/assets/** -whitespace
 gradlew.bat -whitespace
 tools/wine-patches/** -whitespace
+# Preserve unified diff context bytes in published source patches.
+tools/*.patch -whitespace

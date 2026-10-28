@@ -15,6 +15,8 @@ import com.winlator.xserver.Pixmap;
 import com.winlator.xserver.Window;
 import com.winlator.xserver.XClient;
 import com.winlator.xserver.XLock;
+import com.winlator.xserver.XResource;
+import com.winlator.xserver.XResourceManager;
 import com.winlator.xserver.XServer;
 import com.winlator.xserver.errors.BadImplementation;
 import com.winlator.xserver.errors.BadMatch;
@@ -26,13 +28,14 @@ import com.winlator.xserver.events.PresentIdleNotify;
 
 import java.io.IOException;
 
-public class PresentExtension implements Extension {
+public class PresentExtension implements Extension, XResourceManager.OnResourceLifecycleListener {
     public static final byte MAJOR_OPCODE = -103;
     private static final int FAKE_INTERVAL = 1000000 / 60;
     public enum Kind {PIXMAP, MSC_NOTIFY}
     public enum Mode {COPY, FLIP, SKIP}
     private final SparseArray<Event> events = new SparseArray<>();
     private SyncExtension syncExtension;
+    private boolean windowLifecycleRegistered;
 
     private static abstract class ClientOpcodes {
         private static final byte QUERY_VERSION = 0;
@@ -45,6 +48,24 @@ public class PresentExtension implements Extension {
         private XClient client;
         private int id;
         private Bitmask mask;
+    }
+
+    public void freeClientEvents(XClient client) {
+        synchronized (events) {
+            for (int i = events.size()-1; i >= 0; i--) {
+                if (events.valueAt(i).client == client) events.removeAt(i);
+            }
+        }
+    }
+
+    @Override
+    public void onFreeResource(XResource resource) {
+        if (!(resource instanceof Window)) return;
+        synchronized (events) {
+            for (int i = events.size()-1; i >= 0; i--) {
+                if (events.valueAt(i).window == resource) events.removeAt(i);
+            }
+        }
     }
 
     @Override
@@ -143,10 +164,15 @@ public class PresentExtension implements Extension {
         Window window = client.xServer.windowManager.getWindow(windowId);
         if (window == null) throw new BadWindow(windowId);
 
+        if (!windowLifecycleRegistered) {
+            client.xServer.windowManager.addOnResourceLifecycleListener(this);
+            windowLifecycleRegistered = true;
+        }
+
         if (GPUImage.isSupported() && !mask.isEmpty()) {
             Drawable content = window.getContent();
             final Texture oldTexture = content.getTexture();
-            client.xServer.getRenderer().xServerView.queueEvent(oldTexture::destroy);
+            client.xServer.getRenderer().getRendererView().queueEvent(oldTexture::destroy);
             content.setTexture(new GPUImage(content.width, content.height));
         }
 

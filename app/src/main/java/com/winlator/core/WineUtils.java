@@ -257,6 +257,15 @@ public abstract class WineUtils {
     }
 
     public static void overrideWinComponentDlls(Context context, Container container, String wincomponents) {
+        overrideWinComponentDlls(context, container, wincomponents, false);
+    }
+
+    public static boolean skipsComponentOverride(String identifier, boolean preserveDirect3dOverrides) {
+        return preserveDirect3dOverrides && "direct3d".equals(identifier);
+    }
+
+    public static void overrideWinComponentDlls(Context context, Container container, String wincomponents,
+                                               boolean preserveDirect3dOverrides) {
         final String dllOverridesKey = "Software\\Wine\\DllOverrides";
         File userRegFile = new File(container.getRootDir(), ".wine/user.reg");
         Iterator<String[]> oldWinComponentsIter = new KeyValueSet(container.getExtra("wincomponents", Container.FALLBACK_WINCOMPONENTS)).iterator();
@@ -268,6 +277,7 @@ public abstract class WineUtils {
                 if (wincomponent[1].equals(oldWinComponentsIter.next()[1])) continue;
                 String identifier = wincomponent[0];
                 boolean useNative = wincomponent[1].equals("1");
+                if (skipsComponentOverride(identifier, preserveDirect3dOverrides)) continue;
 
                 JSONArray dlnames = wincomponentsJSONObject.getJSONArray(identifier);
                 for (int i = 0; i < dlnames.length(); i++) {

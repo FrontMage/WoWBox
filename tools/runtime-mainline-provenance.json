@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "proton": {
+    "repository": "https://github.com/FrontMage/Proton",
+    "commit": "212f9e729f7f79a582aa1def2d313f21b4c2181c"
+  },
+  "wine": {
+    "repository": "https://github.com/FrontMage/proton-wine",
+    "commit": "a545dee5aa1991ba77985a2cfe8d6a490152d166",
+    "buildArchiveSHA256": "d2e1ed2f22825904a0acc8dacd6e4d534482133cf16952d11928951fe23ce313",
+    "publicArchiveSHA256": "086c3fe69c60493c2a43c9625a3b4d755bff2d6ebc3f44e02a0c85f49cc6efd6",
+    "publicationChange": "Only four font-family substitution entries in share/wine/wine.inf differ; all other archive members verified against the pinned build.",
+    "correspondingSourcePatch": "tools/wine-openfonts-mainline.patch",
+    "sourcePatchSHA256": "2b4400bec0081c08ff295ca029a81277be140eb30bc09eec60102e99df48d86d",
+    "sourceLicense": "LGPL-2.1-or-later"
+  },
+  "fex": {
+    "repository": "https://github.com/FrontMage/FEX",
+    "commit": "7519b9605209e9e19eaf7be669dae7c1848fe5f1",
+    "archiveSHA256": "2beba31f8d0f32c192433f1cd0f8d73e53799e330203d0c7d0d11a883e98ed9d",
+    "sourceLicense": "MIT"
+  },
+  "scope": "Exact source revisions and checked binary inputs; not a claim that every inherited base-image library is reproducible offline."
+}

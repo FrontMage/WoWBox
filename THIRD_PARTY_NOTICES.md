@@ -6,8 +6,8 @@ The application code retains the Winlator MIT notice in LICENSE. Runtime librari
 | --- | --- | --- |
 | Winlator application and helpers | [BrunoSX Winlator](https://github.com/brunodev85/winlator); common winhandler/wfm match official v8.0.0 binaries | MIT; original notice retained in APK assets/licenses |
 | WFM | [brunodev85/wfm](https://github.com/brunodev85/wfm) | MIT |
-| Wine | Android source semantic commit 234e53a454378faa6ee9b3158de88187dbb5d32d; build-context edaa57a8af1714930263ce8c81e15bf73571efe0 | LGPL; full source and generated build files in runtime-sources Release asset; public font INF changes included |
-| FEX | [FrontMage/FEX](https://github.com/FrontMage/FEX), 99d69a936b72da3540b2f3355d007d5ce03ba27c plus scoped native-system-view/jemalloc integration | MIT; original copyright and dependency licenses retained in source archive |
+| Wine | [FrontMage/proton-wine](https://github.com/FrontMage/proton-wine) `a545dee5aa1991ba77985a2cfe8d6a490152d166`, pinned by Proton `212f9e729f7f79a582aa1def2d313f21b4c2181c`; `tools/wine-openfonts-mainline.patch` changes only four font substitutions | LGPL; corresponding pinned source, build instructions and the font-data patch accompany the runtime release |
+| FEX | [FrontMage/FEX](https://github.com/FrontMage/FEX) `7519b9605209e9e19eaf7be669dae7c1848fe5f1`, pinned by Proton `212f9e729f7f79a582aa1def2d313f21b4c2181c` | MIT; original copyright and dependency licenses retained in source archive |
 | jemalloc | [jemalloc/jemalloc](https://github.com/jemalloc/jemalloc), 97d986993dc735a2022856e7e9fdfa1180e8527a | BSD; source vendored in runtime-sources |
 | Vulkan wrapper | [leegao/bionic-vulkan-wrapper](https://github.com/leegao/bionic-vulkan-wrapper), c8baafbd4f4835ca103acb55ec3ac13642b6b7e3 plus preserved Bionic integration patch | Upstream license retained; corresponding source included in runtime-sources |
 | Turnip / Mesa | [FrontMage/mesa](https://github.com/FrontMage/mesa), ebad1310762e8c33014aa4cffface3f13e514ca2; optional Mesa 25.3.6 builds | MIT and component licenses; source revision and IR3 patch preserved |
@@ -38,5 +38,5 @@ The base image filesystem was imported from the Winlator Bionic runtime. Exact o
 - Microsoft/Monotype/Founder font files and closed dgVoodoo/nglide configuration tools were removed from common/base/prefix support archives.
 - Native Microsoft optional-component archives are absent; the public Box selects Wine builtin implementations.
 - Free fonts are registered under their original family names. GDI and DirectWrite compatibility aliases and four Wine INF defaults select those real font families.
-- Wine DLL/EXE/SO code is unchanged; font data and runtime archive identifiers/checksums are updated.
+- The Wine archive comes from the pinned mainline build; the publication copy changes only four font substitution rows in `share/wine/wine.inf`. Wine executable, DLL and shared-library members are unchanged relative to that build.
 - The repository and Release contain no Blizzard installer/game data, user account state, licensed Lossless.dll, private signing key or device session captures.

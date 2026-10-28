@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.util.Log;
 
+import com.winlator.BuildConfig;
 import com.winlator.XServerDisplayActivity;
 import com.winlator.core.Callback;
 import com.winlator.core.FileUtils;
@@ -15,13 +16,11 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.net.ServerSocket;
@@ -33,7 +32,10 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class BoxDebugServer {
     private static final String TAG = "BoxDebugServer";
@@ -65,14 +67,22 @@ public class BoxDebugServer {
         if (running || !spec.debugServer.enabled) return;
         runtime.getDebugToken();
         running = true;
-        executor = Executors.newCachedThreadPool();
+        executor = new ThreadPoolExecutor(4, 8, 60, TimeUnit.SECONDS, new ArrayBlockingQueue<>(32));
         BoxDebugEventBus.subscribe(eventForwarder);
         executor.execute(() -> {
             try {
-                serverSocket = new ServerSocket(spec.debugServer.port);
+                // Public builds expose the authenticated debug API only to the
+                // device itself. adb forward still reaches this IPv4 listener.
+                serverSocket = BoxDebugHttp.openLoopback(spec.debugServer.port);
                 while (running) {
                     Socket socket = serverSocket.accept();
-                    executor.execute(() -> handle(socket));
+                    try {
+                        ExecutorService workers = executor;
+                        if (workers == null) socket.close();
+                        else workers.execute(() -> handle(socket));
+                    } catch (RejectedExecutionException rejected) {
+                        try { socket.close(); } catch (IOException ignored) {}
+                    }
                 }
             }
             catch (IOException e) {
@@ -111,47 +121,27 @@ public class BoxDebugServer {
 
     private void handle(Socket socket) {
         try (Socket s = socket;
-             BufferedReader reader = new BufferedReader(new InputStreamReader(s.getInputStream(), StandardCharsets.UTF_8));
              OutputStream output = s.getOutputStream()) {
-
-            String requestLine = reader.readLine();
-            if (requestLine == null || requestLine.isEmpty()) return;
-            String[] parts = requestLine.split(" ");
-            if (parts.length < 2) return;
-            String method = parts[0];
-            String path = parts[1];
-
-            LinkedHashMap<String, String> headers = new LinkedHashMap<>();
-            String line;
-            while ((line = reader.readLine()) != null && !line.isEmpty()) {
-                int index = line.indexOf(':');
-                if (index > 0) {
-                    headers.put(line.substring(0, index).trim().toLowerCase(), line.substring(index + 1).trim());
-                }
-            }
-
-            if ("websocket".equalsIgnoreCase(headers.get("upgrade")) && "/stream".equals(path)) {
-                handleWebSocket(s, output, headers);
+            s.setSoTimeout(10000);
+            BoxDebugHttp.Request request;
+            try {
+                request = BoxDebugHttp.read(s.getInputStream(), this::isAuthorized);
+            } catch (BoxDebugHttp.RequestException error) {
+                writeJson(output, error.status, error(error.getMessage()));
                 return;
             }
-
-            int length = 0;
-            if (headers.containsKey("content-length")) {
-                try {
-                    length = Integer.parseInt(headers.get("content-length"));
-                }
-                catch (NumberFormatException ignored) {}
-            }
-            char[] bodyChars = new char[length];
-            if (length > 0) reader.read(bodyChars, 0, length);
-            String body = length > 0 ? new String(bodyChars) : "";
-
-            if (!isAuthorized(headers)) {
+            if (request == null) return;
+            if (!request.authorized) {
                 writeJson(output, 401, error("unauthorized"));
                 return;
             }
+            if ("websocket".equalsIgnoreCase(request.headers.get("upgrade")) && "/stream".equals(request.path)) {
+                s.setSoTimeout(0);
+                handleWebSocket(s, output, request.headers);
+                return;
+            }
 
-            JSONObject response = dispatch(method, path, body);
+            JSONObject response = dispatch(request.method, request.path, request.body);
             writeJson(output, 200, response);
         }
         catch (Exception ignored) {}
@@ -223,6 +213,9 @@ public class BoxDebugServer {
             case "/automation/layers/dx-wrapper-stack/install":
                 if (!"POST".equals(method)) return error("method not allowed");
                 return installDxWrapperStackLayer();
+            case "/automation/layers/native-dx-wrapper-stack/install":
+                if (!"POST".equals(method)) return error("method not allowed");
+                return installNativeDxWrapperStackLayer();
             case "/automation/layers/dx-wrapper-stack/select":
                 if (!"POST".equals(method)) return error("method not allowed");
                 return selectDxWrapperStack(body);
@@ -236,6 +229,10 @@ public class BoxDebugServer {
                 if ("POST".equals(method)) return updateFrameGeneration(body);
                 if (!"GET".equals(method)) return error("method not allowed");
                 return new FrameGenerationManager(context).buildStatus();
+            case "/automation/renderdoc":
+                if ("POST".equals(method)) return updateRenderDoc(body);
+                if (!"GET".equals(method)) return error("method not allowed");
+                return new RenderDocCaptureManager(context).buildStatus();
             case "/automation/launch-target":
                 if (!"PUT".equals(method)) return error("method not allowed");
                 return setLaunchTarget(body);
@@ -306,6 +303,8 @@ public class BoxDebugServer {
         JSONObject layers = verifyLayers(runtimeOverlay);
         JSONObject inputBridgeMigration = runtime.buildWowInputBridgeMigrationStatus();
         JSONObject frameGeneration = new FrameGenerationManager(context).buildStatus();
+        JSONObject renderdoc = new RenderDocCaptureManager(context).buildStatus();
+        JSONObject nativeGraphics = new BoxInstaller(context).nativeDxStatus();
         JSONObject processes = XServerDisplayActivity.requestCurrentProcessSnapshot(250);
         JSONArray blockingReasons = new JSONArray();
 
@@ -317,9 +316,13 @@ public class BoxDebugServer {
         if (!inputBridgeMigration.optBoolean("complete", false)) {
             blockingReasons.put("wow_input_bridge_migration_required");
         }
+        if (!nativeGraphics.optBoolean("ready", false)) blockingReasons.put("native_dx_path_missing");
         if (frameGeneration.optBoolean("enabled", false) &&
                 !frameGeneration.optBoolean("ready", false)) {
             blockingReasons.put("frame_generation_not_ready");
+        }
+        if (renderdoc.optBoolean("enabled", false) && !renderdoc.optBoolean("ready", false)) {
+            blockingReasons.put("renderdoc_not_ready");
         }
         JSONObject rootRuntimeOverlays = reconcileRootRuntimeOverlays(
                 runtime.buildRootRuntimeOverlaysStatus(), runtimeOverlay);
@@ -337,7 +340,10 @@ public class BoxDebugServer {
         json.put("layers", layers);
         json.put("runtimeOverlay", runtimeOverlay);
         json.put("wowInputBridgeMigration", inputBridgeMigration);
+        json.put("nativeGraphics", nativeGraphics);
+        json.put("displayRenderer", XServerDisplayActivity.requestCurrentDisplayRendererStatus());
         json.put("frameGeneration", frameGeneration);
+        json.put("renderdoc", renderdoc);
         json.put("rootRuntimeOverlays", rootRuntimeOverlays);
         json.put("prefixProtected", runtime.isPrefixProtected());
         json.put("launchTargets", launchTargetsStatus());
@@ -511,6 +517,32 @@ public class BoxDebugServer {
         json.put("layers", verifyLayers());
         if (!success) json.put("errorCode", "frame_generation_stack_install_failed");
         return json;
+    }
+
+    private JSONObject updateRenderDoc(String body) throws JSONException {
+        if (!BuildConfig.UU_PROBE_BUILD) {
+            JSONObject response = error("RenderDoc is supported only in UU Box");
+            response.put("errorCode", "uu_box_only");
+            return response;
+        }
+        JSONObject request = body == null || body.trim().isEmpty() ? new JSONObject() : new JSONObject(body);
+        RenderDocCaptureManager manager = new RenderDocCaptureManager(context);
+        if (!request.has("enabled") || !(request.get("enabled") instanceof Boolean)) {
+            return error("enabled boolean is required");
+        }
+        JSONObject response = new JSONObject();
+        try {
+            boolean saved = manager.saveEnabled(request.getBoolean("enabled"));
+            response.put("ok", saved);
+            if (!saved) response.put("errorCode", "renderdoc_setting_save_failed");
+        }
+        catch (Exception failure) {
+            response.put("ok", false);
+            response.put("errorCode", "renderdoc_not_ready");
+            response.put("error", failure.getMessage());
+        }
+        response.put("renderdoc", manager.buildStatus());
+        return response;
     }
 
     private JSONObject updateFrameGeneration(String body) throws JSONException {
@@ -757,13 +789,36 @@ public class BoxDebugServer {
         return context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED;
     }
 
-    private JSONObject verifyLayers() throws JSONException {
+    JSONObject verifyLayers() throws JSONException {
         return verifyLayers(verifyRuntimeOverlay());
     }
 
     private static boolean hasActiveWineWorkload() {
         return XServerDisplayActivity.hasActiveSession() ||
                 WineSessionProcessController.getInstance().hasActiveWineProcesses();
+    }
+
+    private JSONObject installNativeDxWrapperStackLayer() throws JSONException {
+        long startedAt = System.currentTimeMillis();
+        if (hasActiveWineWorkload()) {
+            JSONObject result = error("Stop the Box session before updating native DX");
+            result.put("errorCode", "active_box_session");
+            return result;
+        }
+        try {
+            runtime.refreshLayerFromBundledAssetForUpdate(ManagedDxProfile.NATIVE_LAYER_TYPE);
+        }
+        catch (RuntimeException error) {
+            return error(error.getMessage());
+        }
+        boolean success = new BoxInstaller(context).installNativeDxWrapperStackUpdate(null);
+        JSONObject result = new JSONObject();
+        result.put("ok", success);
+        result.put("durationMs", System.currentTimeMillis() - startedAt);
+        result.put("layers", verifyLayers());
+        result.put("nativeGraphics", new BoxInstaller(context).nativeDxStatus());
+        if (!success) result.put("errorCode", "native_dx_install_failed");
+        return result;
     }
 
     static boolean installedLayerIdentityMatches(
@@ -777,7 +832,9 @@ public class BoxDebugServer {
                 installed.optString("checksum", ""),
                 installed.optString("target", ""),
                 installed.optString("winePrefixDeltaManifest", ""),
-                installed.optString("winePrefixDeltaChecksum", ""));
+                installed.optString("winePrefixDeltaChecksum", "")) &&
+                layer.wineBuiltinCompilerSha256.equalsIgnoreCase(
+                        installed.optString("wineBuiltinCompilerSha256", ""));
     }
 
     static boolean installedLayerIdentityMatches(
@@ -816,28 +873,31 @@ public class BoxDebugServer {
             JSONArray currentCriticalFiles = hashCriticalFiles(layer);
             JSONArray baselineCriticalFiles = installed != null ? installed.optJSONArray("criticalFiles") : null;
             boolean criticalBaselineAvailable = baselineCriticalFiles != null && baselineCriticalFiles.length() > 0;
-            boolean criticalFilesPresent = allCriticalFilesExist(currentCriticalFiles);
-            JSONArray overlayCoveredFiles = new JSONArray();
-            boolean criticalFilesMatch = !criticalBaselineAvailable ||
-                    criticalFilesMatch(baselineCriticalFiles, currentCriticalFiles, overlayHashes, overlayCoveredFiles);
+            LinkedHashMap<String, String> optionalPrefixFiles = new LinkedHashMap<>();
             boolean winePrefixDeltaMatches = true;
             if ("prefix-template".equals(layer.type) &&
-                    layer.winePrefixDeltaManifest != null &&
-                    !layer.winePrefixDeltaManifest.isEmpty()) {
+                    layer.winePrefixDeltaManifest != null && !layer.winePrefixDeltaManifest.isEmpty()) {
                 try {
+                    java.util.List<WinePrefixDeltaReconciler.Entry> entries =
+                            installer.loadWinePrefixDeltaEntries(layer, BoxRuntime.resolveRuntimeIdentifier(layer));
+                    for (WinePrefixDeltaReconciler.Entry entry : entries) {
+                        if (entry.winebootMayRemove) optionalPrefixFiles.put(
+                                "/home/xuser-box/.wine/drive_c/windows/" + entry.prefixPath,
+                                entry.candidateSha256);
+                    }
                     winePrefixDeltaMatches = WinePrefixDeltaReconciler.candidateStateMatches(
-                            new File(
-                                    runtime.getContainerRootDir(),
-                                    ".wine/drive_c/windows"),
-                            installer.loadWinePrefixDeltaEntries(
-                                    layer,
-                                    BoxRuntime.resolveRuntimeIdentifier(layer)));
-                }
-                catch (Exception error) {
+                            new File(runtime.getContainerRootDir(), ".wine/drive_c/windows"), entries);
+                } catch (Exception error) {
                     Log.w(TAG, "Unable to verify Wine prefix delta", error);
                     winePrefixDeltaMatches = false;
+                    optionalPrefixFiles.clear();
                 }
             }
+            boolean criticalFilesPresent = allCriticalFilesExist(currentCriticalFiles, optionalPrefixFiles);
+            JSONArray overlayCoveredFiles = new JSONArray();
+            boolean criticalFilesMatch = !criticalBaselineAvailable ||
+                    criticalFilesMatch(baselineCriticalFiles, currentCriticalFiles, overlayHashes,
+                            overlayCoveredFiles, optionalPrefixFiles);
 
             item.put("type", layer.type);
             item.put("source", layer.source);
@@ -977,7 +1037,7 @@ public class BoxDebugServer {
         return verifyRuntimeOverlay();
     }
 
-    private JSONObject verifyRuntimeOverlay() throws JSONException {
+    JSONObject verifyRuntimeOverlay() throws JSONException {
         JSONObject overlay = runtime.getRuntimeOverlay();
         JSONArray issues = new JSONArray();
         JSONArray entries = new JSONArray();
@@ -1097,15 +1157,27 @@ public class BoxDebugServer {
         return null;
     }
 
-    private boolean criticalFilesMatch(JSONArray baseline, JSONArray current,
+    boolean criticalFilesMatch(JSONArray baseline, JSONArray current,
                                        Map<String, String> overlayHashes,
                                        JSONArray overlayCoveredFiles) {
+        return criticalFilesMatch(baseline, current, overlayHashes, overlayCoveredFiles, java.util.Collections.emptyMap());
+    }
+
+    static boolean criticalFilesMatch(JSONArray baseline, JSONArray current,
+                                      Map<String, String> overlayHashes, JSONArray overlayCoveredFiles,
+                                      Map<String, String> optionalPrefixFiles) {
         for (int i = 0; i < baseline.length(); i++) {
             JSONObject expected = baseline.optJSONObject(i);
             if (expected == null) continue;
             String path = expected.optString("path", "");
             JSONObject actual = findCriticalFile(current, path);
             if (actual == null) return false;
+            String optionalSha = optionalPrefixFiles.get(path);
+            if (optionalSha != null) {
+                if (!optionalCriticalRecordMatches(expected, optionalSha) ||
+                        !optionalCriticalRecordMatches(actual, optionalSha)) return false;
+                continue;
+            }
             boolean baselineMatches =
                     expected.optBoolean("exists", false) == actual.optBoolean("exists", false) &&
                     expected.optLong("size", -1) == actual.optLong("size", -2) &&
@@ -1121,7 +1193,7 @@ public class BoxDebugServer {
         return true;
     }
 
-    private LinkedHashMap<String, String> verifiedRuntimeOverlayHashes(JSONObject runtimeOverlay) {
+    LinkedHashMap<String, String> verifiedRuntimeOverlayHashes(JSONObject runtimeOverlay) {
         LinkedHashMap<String, String> hashes = new LinkedHashMap<>();
         if (runtimeOverlay == null || !runtimeOverlay.optBoolean("ok", false) ||
                 !runtimeOverlay.optBoolean("active", false)) return hashes;
@@ -1196,17 +1268,29 @@ public class BoxDebugServer {
         return result;
     }
 
-    private boolean allCriticalFilesExist(JSONArray current) {
+    static boolean allCriticalFilesExist(JSONArray current, Map<String, String> optionalPrefixFiles) {
         if (current == null) return true;
         for (int i = 0; i < current.length(); i++) {
             JSONObject item = current.optJSONObject(i);
             if (item == null) continue;
-            if (!item.optBoolean("exists", false)) return false;
+            String optionalSha = optionalPrefixFiles.get(item.optString("path", ""));
+            if (optionalSha != null) {
+                if (!optionalCriticalRecordMatches(item, optionalSha)) return false;
+            } else if (!item.optBoolean("exists", false)) return false;
         }
         return true;
     }
 
-    private JSONObject findCriticalFile(JSONArray files, String path) {
+    private static boolean optionalCriticalRecordMatches(JSONObject item, String candidateSha) {
+        if (item == null || candidateSha == null || !candidateSha.matches("[0-9a-f]{64}")) return false;
+        if (item.optBoolean("unsafe", false)) return false;
+        if (item.optBoolean("exists", false)) {
+            return item.optLong("size", 0) > 0 && candidateSha.equals(item.optString("sha256", ""));
+        }
+        return item.optLong("size", -1) == 0 && item.optString("sha256", "").isEmpty();
+    }
+
+    private static JSONObject findCriticalFile(JSONArray files, String path) {
         if (files == null) return null;
         for (int i = 0; i < files.length(); i++) {
             JSONObject item = files.optJSONObject(i);
@@ -1223,6 +1307,11 @@ public class BoxDebugServer {
             File file = resolveCriticalFile(rootDir, path);
             JSONObject json = new JSONObject();
             json.put("path", path);
+            // Preserve the difference between confirmed absence and an unsafe
+            // symlink, non-file or inaccessible path for optional Wine files.
+            boolean unsafe = java.nio.file.Files.isSymbolicLink(file.toPath()) ||
+                    (!file.isFile() && !java.nio.file.Files.notExists(file.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS));
+            if (unsafe) json.put("unsafe", true);
             json.put("exists", file.isFile());
             json.put("size", file.isFile() ? file.length() : 0);
             json.put("sha256", file.isFile() ? sha256(file) : "");
@@ -1323,7 +1412,9 @@ public class BoxDebugServer {
 
     private boolean isAuthorized(Map<String, String> headers) {
         String auth = headers.get("x-box-token");
-        return runtime.getDebugToken().equals(auth);
+        if (auth == null) return false;
+        return MessageDigest.isEqual(runtime.getDebugToken().getBytes(StandardCharsets.UTF_8),
+                auth.getBytes(StandardCharsets.UTF_8));
     }
 
     private void handleWebSocket(Socket socket, OutputStream output, Map<String, String> headers) throws Exception {
@@ -1362,7 +1453,10 @@ public class BoxDebugServer {
     private void enqueueWebSocketBroadcast(String message) {
         ExecutorService currentExecutor = executor;
         if (currentExecutor == null || currentExecutor.isShutdown()) return;
-        currentExecutor.execute(() -> broadcastWebSocketText(message));
+        try { currentExecutor.execute(() -> broadcastWebSocketText(message)); }
+        catch (RejectedExecutionException ignored) {
+            // Debug clients must never be able to stall or crash the app.
+        }
     }
 
     private void broadcastWebSocketText(String message) {
@@ -1430,7 +1524,9 @@ public class BoxDebugServer {
             text = json.toString();
         }
         byte[] body = text.getBytes(StandardCharsets.UTF_8);
-        String headers = "HTTP/1.1 " + status + " OK\r\n" +
+        String reason = status == 200 ? "OK" : status == 401 ? "Unauthorized" :
+                status == 413 ? "Payload Too Large" : status == 431 ? "Request Header Fields Too Large" : "Bad Request";
+        String headers = "HTTP/1.1 " + status + " " + reason + "\r\n" +
                 "Content-Type: application/json\r\n" +
                 "Content-Length: " + body.length + "\r\n\r\n";
         output.write(headers.getBytes(StandardCharsets.UTF_8));

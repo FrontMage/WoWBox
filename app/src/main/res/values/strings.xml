@@ -111,6 +111,17 @@
     <string name="box_available_launchers">Available launchers</string>
     <string name="box_input_bridge_migration_required">WoW input support must be repaired before launch.</string>
     <string name="box_launch_failed">Unable to start WoW Box.</string>
+    <string name="box_update_required">Update the WoW Box runtime before launching. Your game data will be preserved.</string>
+    <string name="box_update_action">Update runtime</string>
+    <string name="box_update_running">Updating the runtime…</string>
+    <string name="box_update_checking">Checking the runtime…</string>
+    <string name="box_update_recovery_failed">WoW Box could not recover the previous update. Your files have been kept. Close any running game and try again.</string>
+    <string name="box_update_retry_recovery">Retry recovery</string>
+    <string name="box_update_complete">Runtime update complete.</string>
+    <string name="box_update_failed">The update could not be completed. Your existing data has been kept.</string>
+    <string name="box_update_not_enough_space">Not enough free space to update. Free up storage and try again.</string>
+    <string name="box_update_close_game">Close the running game and WoW Box session before updating.</string>
+    <string name="box_update_existing_data_not_supported">The existing runtime or prefix cannot be safely updated automatically. Your files have been kept.</string>
     <string name="uu_vpn_unavailable_message">UU acceleration is not active. WoW Box is using the current direct network.</string>
     <string name="uu_vpn_lost_message">The UU VPN is no longer active. The game may have fallen back to a direct connection. WoW Box will keep running so you can restore UU manually.</string>
     <string name="box_debug_title">Debug</string>
@@ -130,6 +141,8 @@
     <string name="box_no_executables">No executables found under mounted payload directories.</string>
     <string name="box_restart_container">Restart</string>
     <string name="box_export_snapshot">Export Snapshot</string>
+    <string name="box_snapshot_exported_safe">A limited diagnostic summary was exported. Review it before sharing.</string>
+    <string name="box_snapshot_export_failed">Could not export the diagnostic summary.</string>
     <string name="box_debug_server_info">Debug port: %1$d\nToken: %2$s</string>
     <string name="credits_and_third_party_apps">Credits and Third-party apps</string>
     <string name="external_controllers">External Controllers</string>

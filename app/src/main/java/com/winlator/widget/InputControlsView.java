@@ -31,6 +31,7 @@ import com.winlator.xserver.XServer;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.EnumSet;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -47,7 +48,8 @@ public class InputControlsView extends View {
     private float offsetX;
     private float offsetY;
     private ControlElement selectedElement;
-    private ControlsProfile profile;
+    private volatile ControlsProfile profile;
+    private final EnumSet<Binding> activeBindings = EnumSet.noneOf(Binding.class);
     private float overlayOpacity = DEFAULT_OVERLAY_OPACITY;
     private TouchpadView touchpadView;
     private XServer xServer;
@@ -188,16 +190,17 @@ public class InputControlsView extends View {
         invalidate();
     }
 
-    public synchronized ControlsProfile getProfile() {
+    public ControlsProfile getProfile() {
         return profile;
     }
 
-    public synchronized void setProfile(ControlsProfile profile) {
-        if (profile != null) {
-            this.profile = profile;
-            deselectAllElements();
-        }
-        else this.profile = null;
+    public void setProfile(ControlsProfile profile) {
+        releaseAllControls();
+        if (profile != null) profile.prepareForUse();
+        selectedElement = null;
+        this.profile = profile;
+        WinHandler winHandler = xServer != null ? xServer.getWinHandler() : null;
+        if (winHandler != null) winHandler.onControlsProfileChanged();
     }
 
     public boolean isShowTouchscreenControls() {
@@ -205,7 +208,46 @@ public class InputControlsView extends View {
     }
 
     public void setShowTouchscreenControls(boolean showTouchscreenControls) {
+        if (this.showTouchscreenControls && !showTouchscreenControls) releaseAllControls();
         this.showTouchscreenControls = showTouchscreenControls;
+    }
+
+    @Override
+    protected void onVisibilityChanged(View changedView, int visibility) {
+        super.onVisibilityChanged(changedView, visibility);
+        if (visibility != View.VISIBLE && profile != null) releaseAllControls();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        releaseAllControls();
+        super.onDetachedFromWindow();
+    }
+
+    private void releaseAllControls() {
+        ControlsProfile oldProfile = profile;
+        if (oldProfile != null) {
+            for (ControlElement element : oldProfile.getElements()) element.cancelTouch();
+            for (Binding binding : activeBindings.toArray(new Binding[0])) handleInputEvent(binding, false);
+            GamepadState state = oldProfile.getGamepadState();
+            synchronized (state) { state.copy(new GamepadState()); }
+        }
+        activeBindings.clear();
+        mouseMoveOffset.set(0, 0);
+        if (mouseMoveTimer != null) {
+            mouseMoveTimer.cancel();
+            mouseMoveTimer = null;
+        }
+        if (touchpadView != null) {
+            long now = android.os.SystemClock.uptimeMillis();
+            MotionEvent cancel = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, 0, 0, 0);
+            try { touchpadView.onTouchEvent(cancel); }
+            finally { cancel.recycle(); }
+            touchpadView.setPointerButtonLeftEnabled(true);
+        }
+        WinHandler winHandler = xServer != null ? xServer.getWinHandler() : null;
+        if (oldProfile != null && winHandler != null) winHandler.sendGamepadState();
+        invalidate();
     }
 
     public int getPrimaryColor() {
@@ -263,7 +305,7 @@ public class InputControlsView extends View {
     }
 
     private void createMouseMoveTimer() {
-        if (profile != null && mouseMoveTimer == null) {
+        if (profile != null && xServer != null && mouseMoveTimer == null) {
             final float cursorSpeed = profile.getCursorSpeed();
             mouseMoveTimer = new Timer();
             mouseMoveTimer.schedule(new TimerTask() {
@@ -350,6 +392,11 @@ public class InputControlsView extends View {
         }
 
         if (!editMode && profile != null) {
+            if (event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                releaseAllControls();
+                return true;
+            }
+            if (!showTouchscreenControls) return touchpadView != null && touchpadView.onTouchEvent(event);
             int actionIndex = event.getActionIndex();
             int pointerId = event.getPointerId(actionIndex);
             int actionMasked = event.getActionMasked();
@@ -372,21 +419,22 @@ public class InputControlsView extends View {
                     break;
                 }
                 case MotionEvent.ACTION_MOVE: {
-                    for (byte i = 0, count = (byte)event.getPointerCount(); i < count; i++) {
+                    boolean anyUnhandled = false;
+                    for (int i = 0, count = event.getPointerCount(); i < count; i++) {
                         float x = event.getX(i);
                         float y = event.getY(i);
 
                         handled = false;
                         for (ControlElement element : profile.getElements()) {
-                            if (element.handleTouchMove(i, x, y)) handled = true;
+                            if (element.handleTouchMove(event.getPointerId(i), x, y)) handled = true;
                         }
-                        if (!handled) touchpadView.onTouchEvent(event);
+                        if (!handled) anyUnhandled = true;
                     }
+                    if (anyUnhandled && touchpadView != null) touchpadView.onTouchEvent(event);
                     break;
                 }
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_POINTER_UP:
-                case MotionEvent.ACTION_CANCEL:
                     for (ControlElement element : profile.getElements()) if (element.handleTouchUp(pointerId)) handled = true;
                     if (!handled) touchpadView.onTouchEvent(event);
                     break;
@@ -421,38 +469,42 @@ public class InputControlsView extends View {
     }
 
     public void handleInputEvent(Binding binding, boolean isActionDown, float offset) {
+        if (binding == Binding.NONE || profile == null) return;
+        if (isActionDown) activeBindings.add(binding);
+        else activeBindings.remove(binding);
         if (binding.isGamepad()) {
             WinHandler winHandler = xServer != null ? xServer.getWinHandler() : null;
             GamepadState state = profile.getGamepadState();
 
-            int buttonIdx = binding.ordinal() - Binding.GAMEPAD_BUTTON_A.ordinal();
-            if (buttonIdx <= ExternalController.IDX_BUTTON_Z) {
-                state.setPressed(buttonIdx, isActionDown);
-            }
-            else if (binding == Binding.GAMEPAD_LEFT_THUMB_UP || binding == Binding.GAMEPAD_LEFT_THUMB_DOWN) {
-                state.thumbLY = isActionDown ? offset : 0;
-            }
-            else if (binding == Binding.GAMEPAD_LEFT_THUMB_LEFT || binding == Binding.GAMEPAD_LEFT_THUMB_RIGHT) {
-                state.thumbLX = isActionDown ? offset : 0;
-            }
-            else if (binding == Binding.GAMEPAD_RIGHT_THUMB_UP || binding == Binding.GAMEPAD_RIGHT_THUMB_DOWN) {
-                state.thumbRY = isActionDown ? offset : 0;
-            }
-            else if (binding == Binding.GAMEPAD_RIGHT_THUMB_LEFT || binding == Binding.GAMEPAD_RIGHT_THUMB_RIGHT) {
-                state.thumbRX = isActionDown ? offset : 0;
-            }
-            else if (binding == Binding.GAMEPAD_DPAD_UP || binding == Binding.GAMEPAD_DPAD_RIGHT ||
-                     binding == Binding.GAMEPAD_DPAD_DOWN || binding == Binding.GAMEPAD_DPAD_LEFT) {
-                state.dpad[binding.ordinal() - Binding.GAMEPAD_DPAD_UP.ordinal()] = isActionDown;
+            synchronized (state) {
+                int buttonIdx = binding.ordinal() - Binding.GAMEPAD_BUTTON_A.ordinal();
+                if (buttonIdx <= ExternalController.IDX_BUTTON_Z) {
+                    state.setPressed(buttonIdx, isActionDown);
+                }
+                else if (binding == Binding.GAMEPAD_LEFT_THUMB_UP || binding == Binding.GAMEPAD_LEFT_THUMB_DOWN) {
+                    state.thumbLY = isActionDown ? offset : 0;
+                }
+                else if (binding == Binding.GAMEPAD_LEFT_THUMB_LEFT || binding == Binding.GAMEPAD_LEFT_THUMB_RIGHT) {
+                    state.thumbLX = isActionDown ? offset : 0;
+                }
+                else if (binding == Binding.GAMEPAD_RIGHT_THUMB_UP || binding == Binding.GAMEPAD_RIGHT_THUMB_DOWN) {
+                    state.thumbRY = isActionDown ? offset : 0;
+                }
+                else if (binding == Binding.GAMEPAD_RIGHT_THUMB_LEFT || binding == Binding.GAMEPAD_RIGHT_THUMB_RIGHT) {
+                    state.thumbRX = isActionDown ? offset : 0;
+                }
+                else if (binding == Binding.GAMEPAD_DPAD_UP || binding == Binding.GAMEPAD_DPAD_RIGHT ||
+                         binding == Binding.GAMEPAD_DPAD_DOWN || binding == Binding.GAMEPAD_DPAD_LEFT) {
+                    state.dpad[binding.ordinal() - Binding.GAMEPAD_DPAD_UP.ordinal()] = isActionDown;
+                }
             }
 
             if (winHandler != null) {
-                ExternalController controller = winHandler.getCurrentController();
-                if (controller != null) controller.state.copy(state);
                 winHandler.sendGamepadState();
             }
         }
         else {
+            if (xServer == null) return;
             if (binding == Binding.MOUSE_MOVE_LEFT || binding == Binding.MOUSE_MOVE_RIGHT) {
                 mouseMoveOffset.x = isActionDown ? (offset != 0 ? offset : (binding == Binding.MOUSE_MOVE_LEFT ? -1 : 1)) : 0;
                 if (isActionDown) createMouseMoveTimer();

@@ -53,6 +53,7 @@
 
         <activity
             android:name="com.winlator.XrActivity"
+            android:enabled="false"
             android:configChanges="density|orientation|screenSize|keyboard|keyboardHidden|uiMode"
             android:exported="true"
             android:launchMode="singleTask"

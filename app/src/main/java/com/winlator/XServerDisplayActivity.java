@@ -42,6 +42,9 @@ import com.winlator.box.BoxAutomationState;
 import com.winlator.box.BoxDebugConfig;
 import com.winlator.box.BoxPaths;
 import com.winlator.box.BoxRuntime;
+import com.winlator.box.BoxInstaller;
+import com.winlator.box.ManagedDxProfile;
+import com.winlator.box.NativeShaderCompilerProfile;
 import com.winlator.box.BoxSessionForegroundService;
 import com.winlator.box.BoxSessionManager;
 import com.winlator.box.BoxSessionResumeGate;
@@ -68,6 +71,7 @@ import com.winlator.core.SessionLogs;
 import com.winlator.core.SessionLogWriter;
 import com.winlator.core.TarCompressorUtils;
 import com.winlator.core.WineInfo;
+import com.winlator.core.WineBuiltinRestore;
 import com.winlator.core.WineSessionProcessController;
 import com.winlator.core.WineRegistryEditor;
 import com.winlator.core.WineStartMenuCreator;
@@ -80,6 +84,8 @@ import com.winlator.inputcontrols.ExternalController;
 import com.winlator.inputcontrols.InputControlsManager;
 import com.winlator.math.Mathf;
 import com.winlator.renderer.GLRenderer;
+import com.winlator.renderer.XServerRenderer;
+import com.winlator.widget.XServerRendererView;
 import com.winlator.widget.FrameRating;
 import com.winlator.widget.HUDLayer;
 import com.winlator.widget.ImeBridgeEditText;
@@ -125,13 +131,12 @@ import java.util.concurrent.Executors;
     private static final String URL_HANDLER_HTTPS_KEY = "Software\\Classes\\https\\shell\\open\\command";
     private static final String URL_HANDLER_COMMAND =
             "\"C:\\windows\\winhandler-lite.exe\" --open-url \"%1\"";
-    private static final String IME_PROBE_ARM64_ASSET = "winhandler/ime-contract-probe-arm64.exe";
-    private static final String IME_PROBE_AMD64_ASSET = "winhandler/ime-contract-probe-amd64.exe";
     private static final String FRONTMAGE_WOW_LAUNCHER_ASSET = "winhandler/frontmage-wow-launcher.exe";
     // Bump when changing assets extracted by applyGeneralPatches() (e.g. imagefs_patches.tzst contents)
     // so existing containers re-apply patches without requiring appVersion/imgVersion changes.
     private static final int GENERAL_PATCH_VERSION = 6;
-    private XServerView xServerView;
+    private XServerRendererView xServerView;
+    private String selectedDisplayRenderer = "gl";
     private InputControlsView inputControlsView;
     private TouchpadView touchpadView;
     private XEnvironment environment;
@@ -379,13 +384,24 @@ import java.util.concurrent.Executors;
         setupUI();
 
         Executors.newSingleThreadExecutor().execute(() -> {
-            if (!isGenerateWineprefix()) {
-                setupWineSystemFiles();
-                extractGraphicsDriverFiles();
-                changeWineAudioDriver();
-                ensureGraphicsDriverX11();
+            try {
+                if (!isGenerateWineprefix()) {
+                    setupWineSystemFiles();
+                    extractGraphicsDriverFiles();
+                    changeWineAudioDriver();
+                    ensureGraphicsDriverX11();
+                }
+                setupXEnvironment();
+            } catch (IllegalStateException error) {
+                Log.e(TAG_GUEST_DEBUG, "Unable to prepare Wine system files", error);
+                runOnUiThread(() -> {
+                    preloaderDialog.closeOnUiThread();
+                    android.widget.Toast.makeText(this,
+                            "Unable to prepare Wine system files: " + error.getMessage(),
+                            android.widget.Toast.LENGTH_LONG).show();
+                    finish();
+                });
             }
-            setupXEnvironment();
         });
     }
 
@@ -525,7 +541,7 @@ import java.util.concurrent.Executors;
 
     @Override
     public boolean onNavigationItemSelected(@NonNull MenuItem item) {
-        final GLRenderer renderer = xServerView.getRenderer();
+        final XServerRenderer renderer = xServerView.getRenderer();
         switch (item.getItemId()) {
             case R.id.main_menu_keyboard:
                 suppressImeUntilFocusReset = false;
@@ -755,6 +771,10 @@ import java.util.concurrent.Executors;
             container.putExtra("wincomponents", wincomponents);
             containerDataChanged = true;
         }
+        if (boxLaunchMode != null && !boxLaunchMode.isEmpty() &&
+                NativeShaderCompilerProfile.find(boxRuntime.getSpec()) != null) {
+            new BoxInstaller(this).reconcileNativeShaderCompilerAfterComponents();
+        }
 
         String desktopTheme = container.getDesktopTheme();
         if (!(desktopTheme+","+xServer.screenInfo).equals(container.getExtra("desktopTheme"))) {
@@ -774,7 +794,6 @@ import java.util.concurrent.Executors;
         }
 
         ensureWinHandlerLiteInstalled(imageFs.getRootDir());
-        ensureImeContractProbesInstalled(imageFs.getRootDir());
         ensureFrontMageWowLauncherInstalled(imageFs.getRootDir());
         configureBoxAndroidBrowserUrlHandler();
         if (containerDataChanged) container.saveData();
@@ -1175,8 +1194,9 @@ import java.util.concurrent.Executors;
     private void setupUI() {
         FrameLayout rootView = findViewById(R.id.FLXServerDisplay);
         imeBridgeHost = rootView;
+        selectedDisplayRenderer = "gl";
         xServerView = new XServerView(this, xServer);
-        final GLRenderer renderer = xServerView.getRenderer();
+        final XServerRenderer renderer = xServerView.getRenderer();
         renderer.setCursorVisible(false);
 
         if (shortcut != null) {
@@ -1185,7 +1205,7 @@ import java.util.concurrent.Executors;
         }
 
         xServer.setRenderer(renderer);
-        rootView.addView(xServerView);
+        rootView.addView(xServerView.asView());
 
         globalCursorSpeed = preferences.getFloat("cursor_speed", 1.0f);
         touchpadView = new TouchpadView(this, xServer);
@@ -1328,8 +1348,8 @@ import java.util.concurrent.Executors;
         }
         if (resumeGateOverlay != null) resumeGateOverlay.setVisibility(View.GONE);
         if (xServerView != null) {
-            xServerView.setFocusableInTouchMode(true);
-            xServerView.requestFocus();
+            xServerView.asView().setFocusableInTouchMode(true);
+            xServerView.asView().requestFocus();
         }
     }
 
@@ -1654,8 +1674,8 @@ import java.util.concurrent.Executors;
             drawerLayout.requestFocus();
         }
         if (xServerView != null) {
-            xServerView.setFocusableInTouchMode(true);
-            xServerView.requestFocus();
+            xServerView.asView().setFocusableInTouchMode(true);
+            xServerView.asView().requestFocus();
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -1670,7 +1690,7 @@ import java.util.concurrent.Executors;
 
     private void setHostHudVisible(boolean visible) {
         if (xServerView == null) return;
-        GLRenderer renderer = xServerView.getRenderer();
+        XServerRenderer renderer = xServerView.getRenderer();
 
         if (!visible) {
             renderer.setOnFrameRendered(null);
@@ -1883,7 +1903,9 @@ import java.util.concurrent.Executors;
             String tuDebug = envVars.get("TU_DEBUG");
             if (tuDebug == null) tuDebug = "";
             if (tuDebug.isEmpty()) tuDebug = "noconform";
-            if (!tuDebug.contains("sysmem")) tuDebug = tuDebug + ",sysmem";
+            boolean nativeProfile = boxLaunchMode != null && !boxLaunchMode.isEmpty() &&
+                    ManagedDxProfile.hasNativeLayer(boxRuntime.getSpec());
+            if (!nativeProfile && !tuDebug.contains("sysmem")) tuDebug = tuDebug + ",sysmem";
             envVars.put("TU_DEBUG", tuDebug);
 
             boolean useDRI3 = preferences.getBoolean("use_dri3", true);
@@ -2224,6 +2246,10 @@ import java.util.concurrent.Executors;
     }
 
     private String getDXWrapperCacheId() {
+        if (boxLaunchMode != null && !boxLaunchMode.isEmpty()) {
+            String managed = ManagedDxProfile.cacheIdentity(boxRuntime.getSpec());
+            if (managed != null) return managed;
+        }
         if (dxwrapper == null || dxwrapper.isEmpty()) return "wined3d";
         if (dxwrapper.startsWith("dxvk")) {
             String ver = dxwrapperConfig != null ? dxwrapperConfig.get("version") : "";
@@ -2238,8 +2264,12 @@ import java.util.concurrent.Executors;
     }
 
     private void extractDXWrapperFiles() {
+        if (boxLaunchMode != null && !boxLaunchMode.isEmpty() &&
+                ManagedDxProfile.cacheIdentity(boxRuntime.getSpec()) != null) {
+            new BoxInstaller(this).requireManagedDxInstalled(boxRuntime.getSpec());
+            return;
+        }
         final String[] dlls = {"d3d10.dll", "d3d10_1.dll", "d3d10core.dll", "d3d11.dll", "d3d12.dll", "d3d12core.dll", "d3d8.dll", "d3d9.dll", "dxgi.dll", "ddraw.dll"};
-        if (firstTimeBoot && dxwrapper != null && !dxwrapper.equals("vkd3d")) cloneOriginalDllFiles(dlls);
 
         File rootDir = imageFs.getRootDir();
         File windowsDir = new File(rootDir, ImageFs.WINEPREFIX + "/drive_c/windows");
@@ -2279,18 +2309,22 @@ import java.util.concurrent.Executors;
             ArrayList<String> dlls = new ArrayList<>();
             String wincomponents = shortcut != null ? shortcut.getExtra("wincomponents", container.getWinComponents()) : container.getWinComponents();
 
-            if (firstTimeBoot) {
-                for (String[] wincomponent : new KeyValueSet(wincomponents)) {
-                    JSONArray dlnames = wincomponentsJSONObject.getJSONArray(wincomponent[0]);
-                    for (int i = 0; i < dlnames.length(); i++) {
-                        String dlname = dlnames.getString(i);
-                        dlls.add(!dlname.endsWith(".exe") ? dlname+".dll" : dlname);
-                    }
+            // Check every builtin restore before extracting native components or
+            // changing registry keys. Native-only files have no builtin source;
+            // preserve them in place instead of restoring an unrelated old cache.
+            Iterator<String[]> preflightOld = new KeyValueSet(container.getExtra("wincomponents", Container.FALLBACK_WINCOMPONENTS)).iterator();
+            for (String[] component : new KeyValueSet(wincomponents)) {
+                if (component[1].equals(preflightOld.next()[1]) || component[1].equals("1")) continue;
+                if ("direct3d".equals(component[0]) && boxLaunchMode != null &&
+                        !boxLaunchMode.isEmpty() && NativeShaderCompilerProfile.find(boxRuntime.getSpec()) != null) continue;
+                JSONArray names = wincomponentsJSONObject.getJSONArray(component[0]);
+                for (int i = 0; i < names.length(); i++) {
+                    String name = names.getString(i);
+                    dlls.add(!name.endsWith(".exe") ? name + ".dll" : name);
                 }
-
-                cloneOriginalDllFiles(dlls.toArray(new String[0]));
-                dlls.clear();
             }
+            if (!dlls.isEmpty()) restoreOriginalDllFiles(true, true, dlls.toArray(new String[0]));
+            dlls.clear();
 
             Iterator<String[]> oldWinComponentsIter = new KeyValueSet(container.getExtra("wincomponents", Container.FALLBACK_WINCOMPONENTS)).iterator();
 
@@ -2304,6 +2338,13 @@ import java.util.concurrent.Executors;
                 }
                 else {
                     JSONArray dlnames = wincomponentsJSONObject.getJSONArray(identifier);
+                    if ("direct3d".equals(identifier) && boxLaunchMode != null &&
+                            !boxLaunchMode.isEmpty() &&
+                            NativeShaderCompilerProfile.find(boxRuntime.getSpec()) != null) {
+                        // Restore the managed ARM64X compiler from its selected runtime.
+                        // Legacy cached DLLs can be AMD64 and must not alter syswow64.
+                        continue;
+                    }
                     for (int i = 0; i < dlnames.length(); i++) {
                         String dlname = dlnames.getString(i);
                         dlls.add(!dlname.endsWith(".exe") ? dlname+".dll" : dlname);
@@ -2313,63 +2354,43 @@ import java.util.concurrent.Executors;
                 WineUtils.setWinComponentRegistryKeys(systemRegFile, identifier, useNative);
             }
 
-            if (!dlls.isEmpty()) restoreOriginalDllFiles(dlls.toArray(new String[0]));
-            WineUtils.overrideWinComponentDlls(this, container, wincomponents);
+            if (!dlls.isEmpty()) restoreOriginalDllFiles(false, true, dlls.toArray(new String[0]));
+            boolean ownsCompiler = boxLaunchMode != null && !boxLaunchMode.isEmpty() &&
+                    NativeShaderCompilerProfile.find(boxRuntime.getSpec()) != null;
+            WineUtils.overrideWinComponentDlls(this, container, wincomponents, ownsCompiler);
         }
         catch (JSONException e) {}
     }
 
     private void restoreOriginalDllFiles(final String... dlls) {
-        File rootDir = imageFs.getRootDir();
-        File cacheDir = new File(rootDir, ImageFs.CACHE_PATH+"/original_dlls");
-        if (cacheDir.isDirectory()) {
-            File windowsDir = new File(rootDir, ImageFs.WINEPREFIX+"/drive_c/windows");
-            String[] dirnames = cacheDir.list();
-            int filesCopied = 0;
-
-            for (String dll : dlls) {
-                boolean success = false;
-                for (String dirname : dirnames) {
-                    File srcFile = new File(cacheDir, dirname+"/"+dll);
-                    File dstFile = new File(windowsDir, dirname+"/"+dll);
-                    if (FileUtils.copy(srcFile, dstFile)) success = true;
-                }
-                if (success) filesCopied++;
-            }
-
-            if (filesCopied == dlls.length) return;
-        }
-
-        if (containerManager == null) {
-            cloneOriginalDllFiles(dlls);
-            return;
-        }
-
-        containerManager.extractContainerPatternFile(container.getWineVersion(), container.getRootDir(), (file, size) -> {
-            String path = file.getPath();
-            if (path.contains("system32/") || path.contains("syswow64/")) {
-                for (String dll : dlls) {
-                    if (path.endsWith("system32/"+dll) || path.endsWith("syswow64/"+dll)) return file;
-                }
-            }
-            return null;
-        });
-
-        cloneOriginalDllFiles(dlls);
+        restoreOriginalDllFiles(false, false, dlls);
     }
 
-    private void cloneOriginalDllFiles(final String... dlls) {
-        File rootDir = imageFs.getRootDir();
-        File cacheDir = new File(rootDir, ImageFs.CACHE_PATH+"/original_dlls");
-        if (!cacheDir.isDirectory()) cacheDir.mkdirs();
-        File windowsDir = new File(rootDir, ImageFs.WINEPREFIX+"/drive_c/windows");
-        String[] dirnames = {"system32", "syswow64"};
-
-        for (String dll : dlls) {
-            for (String dirname : dirnames) {
-                File dllFile = new File(windowsDir, dirname+"/"+dll);
-                if (dllFile.isFile()) FileUtils.copy(dllFile, new File(cacheDir, dirname+"/"+dll));
+    private void restoreOriginalDllFiles(boolean validateOnly, boolean allowMissingComponents, final String... dlls) {
+        boolean box = boxLaunchMode != null && !boxLaunchMode.isEmpty();
+        File wineDir;
+        String arch;
+        if (box) {
+            wineDir = new BoxInstaller(this).requireActiveWineRuntime();
+            String id = boxRuntime.getWineRuntimeIdentifier();
+            arch = id.contains("arm64ec") ? "arm64ec" : (id.endsWith("-x86") ? "x86" : "x86_64");
+        }
+        else {
+            String winePath = wineInfo != null && wineInfo.path != null && !wineInfo.path.isEmpty()
+                    ? wineInfo.path : imageFs.getWinePath();
+            if (winePath == null || winePath.isEmpty()) {
+                throw new IllegalStateException("Cannot resolve Wine runtime for builtin restore");
             }
+            wineDir = new File(winePath);
+            arch = wineInfo != null ? wineInfo.getArch() : "x86_64";
+        }
+        File windowsDir = new File(imageFs.getRootDir(), ImageFs.WINEPREFIX + "/drive_c/windows");
+        try {
+            if (validateOnly) WineBuiltinRestore.validate(wineDir, windowsDir, arch, allowMissingComponents, dlls);
+            else WineBuiltinRestore.restore(wineDir, windowsDir, arch, allowMissingComponents, dlls);
+        }
+        catch (java.io.IOException e) {
+            throw new IllegalStateException("Cannot safely restore Wine builtins from " + wineDir, e);
         }
     }
 
@@ -2470,11 +2491,22 @@ import java.util.concurrent.Executors;
         return activity.winHandler.requestProcessSnapshot(timeoutMs);
     }
 
+    public static JSONObject requestCurrentDisplayRendererStatus() {
+        XServerDisplayActivity activity = currentInstance;
+        JSONObject json = activity != null && activity.xServerView != null
+                ? activity.xServerView.getRenderer().buildDisplayStatus() : new JSONObject();
+        try {
+            json.put("selected", activity != null ? activity.selectedDisplayRenderer : "idle");
+            if (activity == null) json.put("active", "idle");
+        } catch (JSONException ignored) {}
+        return json;
+    }
+
     public static boolean hasActiveSession() {
         return currentInstance != null;
     }
 
-    public XServerView getXServerView() {
+    public XServerRendererView getXServerView() {
         return xServerView;
     }
 
@@ -2565,22 +2597,6 @@ import java.util.concurrent.Executors;
         }
         catch (Exception e) {
             Log.w("ImeBridge", "Failed to install winhandler-lite", e);
-        }
-    }
-
-    private void ensureImeContractProbesInstalled(File rootDir) {
-        if (rootDir == null) return;
-        try {
-            File windowsDir = new File(rootDir, ImageFs.WINEPREFIX + "/drive_c/windows");
-            File arm64 = new File(windowsDir, "ime-contract-probe-arm64.exe");
-            File amd64 = new File(windowsDir, "ime-contract-probe-amd64.exe");
-            FileUtils.copy(this, IME_PROBE_ARM64_ASSET, arm64);
-            FileUtils.copy(this, IME_PROBE_AMD64_ASSET, amd64);
-            FileUtils.chmod(arm64, 0771);
-            FileUtils.chmod(amd64, 0771);
-        }
-        catch (Exception e) {
-            Log.w("ImeBridge", "Failed to install IME contract probes", e);
         }
     }
 

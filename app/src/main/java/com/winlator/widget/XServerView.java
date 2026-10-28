@@ -5,6 +5,7 @@ import android.content.Context;
 import android.opengl.GLSurfaceView;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
@@ -12,7 +13,7 @@ import com.winlator.renderer.GLRenderer;
 import com.winlator.xserver.XServer;
 
 @SuppressLint("ViewConstructor")
-public class XServerView extends GLSurfaceView {
+public class XServerView extends GLSurfaceView implements XServerRendererView {
     private final GLRenderer renderer;
     private final Handler cursorHandler = new Handler(Looper.getMainLooper());
     private final Runnable cursorRenderCallback = this::requestRender;
@@ -29,6 +30,8 @@ public class XServerView extends GLSurfaceView {
         setRenderer(renderer);
         setRenderMode(RENDERMODE_WHEN_DIRTY);
     }
+
+    @Override public View asView() { return this; }
 
     public GLRenderer getRenderer() {
         return renderer;

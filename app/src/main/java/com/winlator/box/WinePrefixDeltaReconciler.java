@@ -8,6 +8,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -36,17 +37,46 @@ final class WinePrefixDeltaReconciler {
         final String prefixPath;
         final String runtimePath;
         final String baselineSha256;
+        final List<String> baselineSha256Alternates;
         final String candidateSha256;
+        final boolean winebootMayRemove;
 
         Entry(
                 String prefixPath,
                 String runtimePath,
                 String baselineSha256,
                 String candidateSha256) {
+            this(prefixPath, runtimePath, baselineSha256, candidateSha256, Collections.emptyList(), false);
+        }
+
+        Entry(String prefixPath, String runtimePath, String baselineSha256,
+              String candidateSha256, List<String> alternates) {
+            this(prefixPath, runtimePath, baselineSha256, candidateSha256, alternates, false);
+        }
+
+        Entry(String prefixPath, String runtimePath, String baselineSha256,
+              String candidateSha256, List<String> alternates, boolean winebootMayRemove) {
             this.prefixPath = prefixPath;
             this.runtimePath = runtimePath;
             this.baselineSha256 = normalizeSha256(baselineSha256, "baselineSha256");
             this.candidateSha256 = normalizeSha256(candidateSha256, "candidateSha256");
+            ArrayList<String> normalized = new ArrayList<>();
+            if (alternates != null) for (String value : alternates) {
+                String sha = normalizeSha256(value, "baselineSha256Alternates");
+                if (sha.equals(this.baselineSha256) || sha.equals(this.candidateSha256) || normalized.contains(sha)) {
+                    throw new IllegalArgumentException("Duplicate or candidate Wine prefix baseline");
+                }
+                normalized.add(sha);
+            }
+            this.baselineSha256Alternates = Collections.unmodifiableList(normalized);
+            if (winebootMayRemove && !isWinebootOptionalPath(prefixPath)) {
+                throw new IllegalArgumentException("Wineboot optional policy does not allow: " + prefixPath);
+            }
+            this.winebootMayRemove = winebootMayRemove;
+        }
+
+        boolean matchesBaseline(String value) {
+            return baselineSha256.equals(value) || baselineSha256Alternates.contains(value);
         }
     }
 
@@ -78,6 +108,78 @@ final class WinePrefixDeltaReconciler {
     }
 
     private WinePrefixDeltaReconciler() {}
+
+    /**
+     * Seed missing targets only in a newly extracted, not-yet-used prefix.
+     * Existing prefixes must continue to use the strict reconcile method.
+     */
+    static void seedFreshMissing(File runtimeRoot, File prefixWindowsRoot, List<Entry> entries)
+            throws IOException {
+        if (runtimeRoot == null || !runtimeRoot.isDirectory() ||
+                Files.isSymbolicLink(runtimeRoot.toPath()) || prefixWindowsRoot == null ||
+                !prefixWindowsRoot.isDirectory() || Files.isSymbolicLink(prefixWindowsRoot.toPath()) ||
+                entries == null || entries.isEmpty()) {
+            throw new IllegalStateException("Invalid fresh Wine prefix delta roots or entries");
+        }
+        File runtime = runtimeRoot.getCanonicalFile();
+        File prefix = prefixWindowsRoot.getCanonicalFile();
+        Set<String> destinations = new HashSet<>();
+        ArrayList<PlannedEntry> missing = new ArrayList<>();
+        for (Entry entry : entries) {
+            validateEntry(entry);
+            if (!destinations.add(entry.prefixPath.toLowerCase(Locale.US))) {
+                throw new IllegalArgumentException("Duplicate Wine prefix delta path: " + entry.prefixPath);
+            }
+            File source = resolveContained(runtime, entry.runtimePath);
+            File destination = resolveContained(prefix, entry.prefixPath);
+            if (!source.getName().equalsIgnoreCase(destination.getName()) ||
+                    !source.isFile() || Files.isSymbolicLink(source.toPath()) ||
+                    !entry.candidateSha256.equals(sha256(source))) {
+                throw new IllegalStateException("Invalid fresh Wine prefix delta source: " + entry.runtimePath);
+            }
+            if (!Files.notExists(destination.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                if (!destination.isFile() || Files.isSymbolicLink(destination.toPath())) {
+                    throw new IllegalStateException("Unsafe fresh Wine prefix destination: " + entry.prefixPath);
+                }
+                String actual = sha256(destination);
+                if (!entry.matchesBaseline(actual) && !entry.candidateSha256.equals(actual)) {
+                    throw new IllegalStateException("Unknown fresh Wine prefix destination hash: " + entry.prefixPath);
+                }
+            } else if (!entry.winebootMayRemove) {
+                missing.add(new PlannedEntry(entry, source, destination, true));
+            }
+        }
+        try {
+            for (PlannedEntry item : missing) {
+                item.prepared = new File(item.destination.getAbsolutePath() + ".wine-fresh-new");
+                if (item.prepared.exists() || Files.isSymbolicLink(item.prepared.toPath())) {
+                    throw new IllegalStateException("Stale fresh Wine prefix file: " + item.prepared);
+                }
+                copyFile(item.source, item.prepared);
+                if (!item.entry.candidateSha256.equals(sha256(item.prepared))) {
+                    throw new IllegalStateException("Fresh Wine prefix prepared hash mismatch: " + item.entry.prefixPath);
+                }
+            }
+            for (PlannedEntry item : missing) {
+                if (item.destination.exists() || Files.isSymbolicLink(item.destination.toPath()) ||
+                        !item.prepared.renameTo(item.destination)) {
+                    throw new IllegalStateException("Unable to seed fresh Wine prefix: " + item.entry.prefixPath);
+                }
+                item.activated = true;
+            }
+        } catch (RuntimeException | IOException failure) {
+            for (PlannedEntry item : missing) {
+                if (item.activated && item.destination.exists() && !item.destination.delete()) {
+                    failure.addSuppressed(new IOException("Cannot undo fresh Wine prefix seed: " + item.destination));
+                }
+            }
+            throw failure;
+        } finally {
+            for (PlannedEntry item : missing) {
+                if (item.prepared != null && item.prepared.exists()) item.prepared.delete();
+            }
+        }
+    }
 
     static Result reconcile(File runtimeRoot, File prefixWindowsRoot, List<Entry> entries)
             throws IOException {
@@ -124,8 +226,18 @@ final class WinePrefixDeltaReconciler {
                 throw new IllegalStateException("Wine prefix delta source is missing or unsafe: " +
                         item.source);
             }
-            if (!item.destination.isFile() ||
-                    Files.isSymbolicLink(item.destination.toPath())) {
+            if (Files.isSymbolicLink(item.destination.toPath())) {
+                throw new IllegalStateException("Wine prefix delta destination is unsafe: " + item.destination);
+            }
+            boolean absent = Files.notExists(item.destination.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS);
+            if (absent && item.entry.winebootMayRemove) {
+                if (!item.entry.candidateSha256.equals(sha256(item.source))) {
+                    throw new IllegalStateException("Wine prefix delta source hash mismatch: " + item.entry.runtimePath);
+                }
+                alreadyCurrent++;
+                continue;
+            }
+            if (!item.destination.isFile()) {
                 throw new IllegalStateException(
                         "Wine prefix delta destination is missing or unsafe: " +
                                 item.destination);
@@ -141,7 +253,7 @@ final class WinePrefixDeltaReconciler {
             if (item.entry.candidateSha256.equals(currentSha256)) {
                 alreadyCurrent++;
             }
-            else if (item.entry.baselineSha256.equals(currentSha256)) {
+            else if (item.entry.matchesBaseline(currentSha256)) {
                 item.replace = true;
             }
             else {
@@ -236,8 +348,13 @@ final class WinePrefixDeltaReconciler {
         for (Entry entry : entries) {
             validateEntry(entry);
             if (!seenDestinations.add(entry.prefixPath.toLowerCase(Locale.US))) return false;
-            File destination = resolveContained(canonicalPrefixRoot, entry.prefixPath);
-            if (!destination.isFile() || Files.isSymbolicLink(destination.toPath()) ||
+            File destination;
+            try { destination = resolveContained(canonicalPrefixRoot, entry.prefixPath); }
+            catch (IllegalArgumentException unsafePath) { return false; }
+            if (Files.isSymbolicLink(destination.toPath())) return false;
+            if (entry.winebootMayRemove &&
+                    Files.notExists(destination.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) continue;
+            if (!destination.isFile() ||
                     !entry.candidateSha256.equals(sha256(destination))) {
                 return false;
             }
@@ -260,6 +377,23 @@ final class WinePrefixDeltaReconciler {
         return !(basename.startsWith("d3d") && basename.endsWith(".dll")) &&
                 !"dxgi.dll".equals(basename) &&
                 !(basename.startsWith("xinput") && basename.endsWith(".dll"));
+    }
+
+    /** Exact entries explicitly removed by the pinned Wine INF in both views. */
+    static boolean isWinebootOptionalPath(String path) {
+        if (path == null) return false;
+        int slash = path.indexOf('/');
+        if (slash < 0 || path.indexOf('/', slash + 1) >= 0) return false;
+        String dir = path.substring(0, slash);
+        if (!"system32".equals(dir) && !"syswow64".equals(dir)) return false;
+        switch (path.substring(slash + 1)) {
+            case "aspnet_regiis.exe": case "ngen.exe": case "fusion.dll":
+            case "diasymreader.dll": case "mscorwks.dll": case "regsvcs.exe":
+            case "regasm.exe": case "servicemodelreg.exe":
+            case "presentationfontcache.exe": case "comctl32_v6.dll":
+                return true;
+            default: return false;
+        }
     }
 
     static boolean isAllowedRuntimePath(String path) {
@@ -371,73 +505,73 @@ final class WinePrefixDeltaReconciler {
         destination.setExecutable(source.canExecute(), false);
     }
 
+    private static boolean existsNoFollowOrThrow(File file, String description) throws IOException {
+        if (Files.exists(file.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) return true;
+        if (Files.notExists(file.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) return false;
+        throw new IOException("Cannot determine Wine prefix " + description + ": " + file);
+    }
+
     private static void recoverInterruptedTransaction(List<PlannedEntry> plan)
             throws IOException {
         boolean hasBackup = false;
         boolean hasPrepared = false;
-        int baselineDestinations = 0;
         int candidateDestinations = 0;
+        int optionalAbsentDestinations = 0;
+        Set<PlannedEntry> originalCandidates = new HashSet<>();
 
+        // Preflight every backup, staged file and target before mutating any of
+        // them. A candidate without a backup and without a staged file can be
+        // an entry which was already current before this transaction began.
         for (PlannedEntry item : plan) {
             item.prepared = new File(item.destination.getAbsolutePath() + ".wine-delta-new");
             item.backup = new File(item.destination.getAbsolutePath() + ".wine-delta-backup");
-
-            if (Files.isSymbolicLink(item.prepared.toPath()) ||
-                    Files.isSymbolicLink(item.backup.toPath())) {
-                throw new IllegalStateException(
-                        "Wine prefix delta transaction path is a symlink for " +
-                                item.entry.prefixPath);
+            if (Files.isSymbolicLink(item.prepared.toPath()) || Files.isSymbolicLink(item.backup.toPath()) ||
+                    Files.isSymbolicLink(item.destination.toPath())) {
+                throw new IllegalStateException("Wine prefix delta transaction path is a symlink: " + item.entry.prefixPath);
             }
-            if (item.prepared.exists()) {
+            boolean prepared = existsNoFollowOrThrow(item.prepared, "prepared file");
+            boolean backup = existsNoFollowOrThrow(item.backup, "backup");
+            boolean destination = existsNoFollowOrThrow(item.destination, "destination");
+            if (prepared) {
                 hasPrepared = true;
-                if (!item.prepared.isFile() ||
-                        !item.entry.candidateSha256.equals(sha256(item.prepared))) {
-                    throw new IllegalStateException(
-                            "Wine prefix delta stale prepared hash mismatch: " +
-                                    item.entry.prefixPath);
+                if (!item.prepared.isFile() || !item.entry.candidateSha256.equals(sha256(item.prepared))) {
+                    throw new IllegalStateException("Wine prefix delta stale prepared hash mismatch: " + item.entry.prefixPath);
                 }
             }
-            if (item.backup.exists()) {
+            if (backup) {
                 hasBackup = true;
-                if (!item.backup.isFile() ||
-                        !item.entry.baselineSha256.equals(sha256(item.backup))) {
-                    throw new IllegalStateException(
-                            "Wine prefix delta stale backup hash mismatch: " +
-                                    item.entry.prefixPath);
+                if (!item.backup.isFile() || !item.entry.matchesBaseline(sha256(item.backup))) {
+                    throw new IllegalStateException("Wine prefix delta stale backup hash mismatch: " + item.entry.prefixPath);
                 }
+            }
+            if (!destination) {
+                if (backup) continue;
+                if (item.entry.winebootMayRemove && !prepared) {
+                    optionalAbsentDestinations++;
+                    continue;
+                }
+                throw new IllegalStateException("Wine prefix delta destination is missing without a backup: " + item.entry.prefixPath);
+            }
+            if (!item.destination.isFile()) {
+                throw new IllegalStateException("Wine prefix delta destination is unsafe during recovery: " + item.entry.prefixPath);
+            }
+            String hash = sha256(item.destination);
+            if (item.entry.candidateSha256.equals(hash)) {
+                candidateDestinations++;
+                if (!backup) {
+                    if (prepared) throw new IllegalStateException("Ambiguous current and prepared Wine prefix entry: " + item.entry.prefixPath);
+                    originalCandidates.add(item);
+                }
+            } else if (item.entry.matchesBaseline(hash)) {
+                if (backup) throw new IllegalStateException("Ambiguous baseline and backup Wine prefix entry: " + item.entry.prefixPath);
+            } else {
+                throw new IllegalStateException("Wine prefix delta rejected unknown destination hash during recovery: " + item.entry.prefixPath);
             }
         }
-
         if (!hasBackup && !hasPrepared) return;
 
-        for (PlannedEntry item : plan) {
-            if (!item.destination.exists()) {
-                if (!item.backup.exists()) {
-                    throw new IllegalStateException(
-                            "Wine prefix delta destination is missing without a backup: " +
-                                    item.entry.prefixPath);
-                }
-                continue;
-            }
-            if (!item.destination.isFile() ||
-                    Files.isSymbolicLink(item.destination.toPath())) {
-                throw new IllegalStateException(
-                        "Wine prefix delta destination is unsafe during recovery: " +
-                                item.entry.prefixPath);
-            }
-            String destinationSha256 = sha256(item.destination);
-            if (item.entry.baselineSha256.equals(destinationSha256)) baselineDestinations++;
-            else if (item.entry.candidateSha256.equals(destinationSha256)) candidateDestinations++;
-            else {
-                throw new IllegalStateException(
-                        "Wine prefix delta destination has an unknown recovery hash: " +
-                                item.entry.prefixPath);
-            }
-        }
-
-        if (hasBackup && candidateDestinations == plan.size()) {
-            // Activation and verification completed for every entry; a process
-            // interruption only prevented transaction-artifact cleanup.
+        if (hasBackup && candidateDestinations + optionalAbsentDestinations == plan.size()) {
+            // Every effective target is already the candidate; only cleanup was interrupted.
             for (PlannedEntry item : plan) {
                 deleteTransactionFile(item.backup, item.entry.prefixPath);
                 deleteTransactionFile(item.prepared, item.entry.prefixPath);
@@ -445,64 +579,46 @@ final class WinePrefixDeltaReconciler {
             return;
         }
 
+        // Without a durable per-entry journal, a current candidate without a
+        // backup could have been current initially or could have lost its
+        // backup. Never guess in a mixed partially activated transaction.
+        if (hasBackup && !originalCandidates.isEmpty()) {
+            throw new IllegalStateException("Ambiguous Wine prefix candidate without backup");
+        }
+
         if (hasBackup) {
-            // Activation stopped part way through. Roll the entire set back to
-            // the declared baseline before attempting a fresh transaction.
             for (int i = plan.size() - 1; i >= 0; i--) {
                 PlannedEntry item = plan.get(i);
-                if (!item.destination.exists()) {
-                    if (!item.backup.exists() || !item.backup.renameTo(item.destination)) {
-                        throw new IOException(
-                                "Unable to restore interrupted Wine prefix delta backup: " +
-                                        item.entry.prefixPath);
+                boolean backup = existsNoFollowOrThrow(item.backup, "backup");
+                boolean destination = existsNoFollowOrThrow(item.destination, "destination");
+                if (backup) {
+                    if (destination && !item.destination.delete()) {
+                        throw new IOException("Unable to remove interrupted Wine prefix candidate: " + item.entry.prefixPath);
                     }
-                }
-                else {
-                    String destinationSha256 = sha256(item.destination);
-                    if (item.entry.candidateSha256.equals(destinationSha256)) {
-                        if (!item.backup.exists()) {
-                            throw new IllegalStateException(
-                                    "Wine prefix delta cannot roll back candidate without backup: " +
-                                            item.entry.prefixPath);
-                        }
-                        if (!item.destination.delete() ||
-                                !item.backup.renameTo(item.destination)) {
-                            throw new IOException(
-                                    "Unable to roll back interrupted Wine prefix delta: " +
-                                            item.entry.prefixPath);
-                        }
-                    }
-                    else {
-                        deleteTransactionFile(item.backup, item.entry.prefixPath);
+                    if (!item.backup.renameTo(item.destination)) {
+                        throw new IOException("Unable to restore interrupted Wine prefix backup: " + item.entry.prefixPath);
                     }
                 }
                 deleteTransactionFile(item.prepared, item.entry.prefixPath);
             }
             for (PlannedEntry item : plan) {
-                if (!item.destination.isFile() ||
-                        !item.entry.baselineSha256.equals(sha256(item.destination))) {
-                    throw new IllegalStateException(
-                            "Wine prefix delta rollback verification failed: " +
-                                    item.entry.prefixPath);
+                if (item.entry.winebootMayRemove && !existsNoFollowOrThrow(item.destination, "destination")) continue;
+                if (!item.destination.isFile()) throw new IllegalStateException("Wine prefix rollback is missing: " + item.entry.prefixPath);
+                String hash = sha256(item.destination);
+                if (originalCandidates.contains(item) ? !item.entry.candidateSha256.equals(hash) : !item.entry.matchesBaseline(hash)) {
+                    throw new IllegalStateException("Wine prefix rollback verification failed: " + item.entry.prefixPath);
                 }
             }
             return;
         }
 
-        // Prepared files without backups mean activation never started. The
-        // destinations must be uniformly baseline (pre-activation) or candidate
-        // (post-commit cleanup); a mixed set has no safe automatic recovery.
-        if (baselineDestinations != plan.size() && candidateDestinations != plan.size()) {
-            throw new IllegalStateException(
-                    "Wine prefix delta has an ambiguous interrupted transaction");
-        }
-        for (PlannedEntry item : plan) {
-            deleteTransactionFile(item.prepared, item.entry.prefixPath);
-        }
+        // Only prepared files exist. No backup means no target was replaced;
+        // mixed original-baseline and originally-current entries are valid.
+        for (PlannedEntry item : plan) deleteTransactionFile(item.prepared, item.entry.prefixPath);
     }
 
     private static void deleteTransactionFile(File file, String path) throws IOException {
-        if (file != null && file.exists() && !file.delete()) {
+        if (file != null && existsNoFollowOrThrow(file, "transaction file") && !file.delete()) {
             throw new IOException("Unable to clean Wine prefix delta transaction file for " +
                     path);
         }

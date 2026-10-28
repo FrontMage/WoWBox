@@ -19,6 +19,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.winlator.box.BoxPaths;
+import com.winlator.box.BoxInstaller;
 import com.winlator.box.BoxRuntime;
 import com.winlator.box.BoxSpec;
 
@@ -38,6 +39,11 @@ public class BoxLauncherFragment extends Fragment {
     private View launcherSectionView;
     private Button desktopButton;
     private Button downloadBattleNetButton;
+    private Button runtimeUpdateButton;
+    private TextView runtimeUpdateStatus;
+    private boolean upgrading;
+    private boolean recovering;
+    private boolean recoveryFailed;
     private BoxRuntime runtime;
 
     @Nullable
@@ -57,25 +63,72 @@ public class BoxLauncherFragment extends Fragment {
         launcherSectionView = view.findViewById(R.id.TVLauncherSection);
         desktopButton = view.findViewById(R.id.BTDesktop);
         downloadBattleNetButton = view.findViewById(R.id.BTDownloadBattleNet);
+        runtimeUpdateButton = view.findViewById(R.id.BTRuntimeUpdate);
+        runtimeUpdateStatus = view.findViewById(R.id.TVRuntimeUpdateStatus);
 
         recyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
 
         desktopButton.setOnClickListener((v) -> launchOrShowError(null, null));
         downloadBattleNetButton.setOnClickListener((v) -> openBattleNetDownloadPage());
+        runtimeUpdateButton.setOnClickListener((v) -> {
+            if (recoveryFailed) refreshRuntimeState();
+            else updateRuntime();
+        });
 
         ((AppCompatActivity) requireActivity()).getSupportActionBar().setTitle(R.string.box_launcher_title);
-        loadExecutables();
+        refreshRuntimeState();
     }
 
     @Override
     public void onResume() {
         super.onResume();
         if (runtime != null) {
-            loadExecutables();
+            refreshRuntimeState();
         }
     }
 
+    private void refreshRuntimeState() {
+        if (recovering || upgrading) return;
+        final androidx.fragment.app.FragmentActivity activity = getActivity();
+        if (activity == null) return;
+        recovering = true;
+        runtimeUpdateStatus.setVisibility(View.VISIBLE);
+        runtimeUpdateStatus.setText(R.string.box_update_checking);
+        runtimeUpdateButton.setEnabled(false);
+        desktopButton.setEnabled(false);
+        new Thread(() -> {
+            String error = null;
+            try { runtime.recoverPendingReleaseBeforeLaunch(); }
+            catch (RuntimeException failure) {
+                error = failure.getMessage() != null ? failure.getMessage() : failure.getClass().getSimpleName();
+            }
+            final String result = error;
+            activity.runOnUiThread(() -> {
+                if (!isAdded() || getView() == null) return;
+                recovering = false;
+                if (result != null) {
+                    recoveryFailed = true;
+                    android.util.Log.e("WoWBox", "Runtime recovery failed: " + result);
+                    runtimeUpdateStatus.setText(R.string.box_update_recovery_failed);
+                    runtimeUpdateButton.setVisibility(View.VISIBLE);
+                    runtimeUpdateButton.setText(R.string.box_update_retry_recovery);
+                    runtimeUpdateButton.setEnabled(true);
+                    return;
+                }
+                recoveryFailed = false;
+                runtimeUpdateButton.setText(R.string.box_update_action);
+                loadExecutables();
+            });
+        }, "wowbox-runtime-recovery").start();
+    }
+
     private void loadExecutables() {
+        boolean updateRequired = new BoxInstaller(requireContext()).needsBundledReleaseUpgrade();
+        runtimeUpdateButton.setVisibility(updateRequired ? View.VISIBLE : View.GONE);
+        runtimeUpdateStatus.setVisibility(updateRequired ? View.VISIBLE : View.GONE);
+        if (updateRequired && !upgrading) runtimeUpdateStatus.setText(R.string.box_update_required);
+        runtimeUpdateButton.setEnabled(!upgrading);
+        desktopButton.setEnabled(!updateRequired && !upgrading);
         boolean battleNetInstalled = runtime.launchTargetExistsById(BATTLENET_TARGET_ID);
         File installer = new File(BoxPaths.getPayloadDir(runtime.getSpec()), BATTLENET_INSTALLER_NAME);
         boolean installerReady = installer.isFile();
@@ -112,6 +165,10 @@ public class BoxLauncherFragment extends Fragment {
 
     private void launchOrShowError(String targetId, String hostPath) {
         try {
+            if (recovering || recoveryFailed || upgrading || new BoxInstaller(requireContext()).needsBundledReleaseUpgrade()) {
+                Toast.makeText(requireContext(), R.string.box_update_required, Toast.LENGTH_LONG).show();
+                return;
+            }
             if (targetId != null) runtime.launchTarget(targetId, null);
             else if (hostPath != null) runtime.launchExecutable(hostPath);
             else runtime.launchDesktop();
@@ -126,6 +183,49 @@ public class BoxLauncherFragment extends Fragment {
             }
             Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show();
         }
+    }
+
+    private void updateRuntime() {
+        if (upgrading) return;
+        final androidx.fragment.app.FragmentActivity activity = getActivity();
+        if (activity == null) return;
+        upgrading = true;
+        runtimeUpdateButton.setEnabled(false);
+        desktopButton.setEnabled(false);
+        runtimeUpdateStatus.setText(R.string.box_update_running);
+        final BoxInstaller installer = new BoxInstaller(activity.getApplicationContext());
+        new Thread(() -> {
+            String error = null;
+            try {
+                installer.upgradeBundledRelease(null);
+            }
+            catch (RuntimeException failure) {
+                error = failure.getMessage() != null ? failure.getMessage() : failure.getClass().getSimpleName();
+            }
+            final String result = error;
+            activity.runOnUiThread(() -> {
+                if (!isAdded() || getView() == null) return;
+                upgrading = false;
+                loadExecutables();
+                if (result == null) {
+                    Toast.makeText(activity, R.string.box_update_complete, Toast.LENGTH_LONG).show();
+                }
+                else {
+                    android.util.Log.e("WoWBox", "Runtime update failed: " + result);
+                    runtimeUpdateStatus.setVisibility(View.VISIBLE);
+                    runtimeUpdateStatus.setText(updateErrorMessage(result));
+                }
+            });
+        }, "wowbox-runtime-update").start();
+    }
+
+    private int updateErrorMessage(String error) {
+        String value = error.toLowerCase(java.util.Locale.US);
+        if (value.contains("insufficient") || value.contains("free space")) return R.string.box_update_not_enough_space;
+        if (value.contains("active_wine") || value.contains("requires_idle")) return R.string.box_update_close_game;
+        if (value.contains("unknown") || value.contains("unsupported") || value.contains("protected") ||
+                value.contains("overlay") || value.contains("unverified")) return R.string.box_update_existing_data_not_supported;
+        return R.string.box_update_failed;
     }
 
     private static class LaunchItem {
