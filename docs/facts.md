@@ -9,3 +9,8 @@
 - The standard preview does not enable the XR activity; its separate process
   needs runtime-upgrade synchronization before it can be enabled safely.
   Source: code-evidence (app/src/main/AndroidManifest.xml:54-63).
+
+- Runtime asset bootstrap preserves existing matching files and their modes;
+  it rejects modified inputs rather than overwriting them and validates the
+  complete bundle before installing missing files.
+  Source: code-evidence (scripts/fetch-runtime-assets.py:64-122).
