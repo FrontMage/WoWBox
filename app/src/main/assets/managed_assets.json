@@ -6,7 +6,7 @@
     "frame-generation-stack": "frame_generation/lsfg-vk-feb7899-wowbox-route-v3-8c31f59a.tzst",
     "wine-runtime": "wine-runtime-wowbox-mainline-openfonts-086c3fe6.txz",
     "prefix-template": "wine-prefix-wowbox-openfonts-350c6f28.tzst",
-    "input-bridge-stack": "winhandler/winhandler-xinput-wow-filtered-arm64x-437d6859.tzst",
+    "input-bridge-stack": "winhandler/winhandler-xinput-wow-filtered-arm64x-149a9ca4.tzst",
     "cpu-emu-stack": "fexcore/fexcore-2508-wowbox-mainline-7519b960-2beba31f.tzst",
     "dx-wrapper-stack": "dxwrapper/dxvk-2.7.1-vkd3d-3.1.0-wowclassic-f1d78e4d-amd64.tzst",
     "gpu-driver-stack": "graphics_driver/adrenotools-turnip26.1.5-frontmage-ir3-nonstrict-ebad131-abc97b08.tzst"
@@ -26,15 +26,15 @@
     },
     {
       "role": "input-bridge-stack",
-      "assetPath": "winhandler/winhandler-xinput-wow-filtered-arm64x-437d6859.tzst",
-      "filename": "winhandler-xinput-wow-filtered-arm64x-437d6859.tzst",
-      "sha256": "437d68591aace9cd599e7e2653abe0333fa7726df1d65d20fc2ffa33a2beff4d",
-      "sizeBytes": 31348,
-      "tag": "v0.1.0",
+      "assetPath": "winhandler/winhandler-xinput-wow-filtered-arm64x-149a9ca4.tzst",
+      "filename": "winhandler-xinput-wow-filtered-arm64x-149a9ca4.tzst",
+      "sha256": "149a9ca40b1119d01de5599faead07a9748cba511b0039fafaa48b4e0e10078c",
+      "sizeBytes": 20126,
+      "tag": "v0.2.0-preview",
       "sourceRef": "brunodev85/wine-9.2-custom a4ef2bf8963fe4bfab390eebf73336364ce209bc plus tools/wine-patches/winhandler-xinput-process-filter.patch, linked as a Wine ARM64X builtin by scripts/build-winhandler-xinput-filtered-arm64x.sh.",
       "runtimeIdentifier": "proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff",
       "status": "baseline",
-      "notes": "Public Linux/Android runtime component used by the standard WoW Box release."
+      "notes": "Wine ARM64X process-filtered bridge; debug sections stripped for public distribution. Runtime sections and ARM64X metadata were verified unchanged."
     },
     {
       "role": "base-imagefs",

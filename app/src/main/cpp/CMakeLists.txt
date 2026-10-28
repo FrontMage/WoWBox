@@ -2,6 +2,13 @@ cmake_minimum_required(VERSION 3.22.1)
 
 Project(Winlator)
 
+# Keep build-machine checkout paths out of diagnostics and native debug data.
+# Map the whole checkout, including generated CMake files, before configuring
+# any native subprojects so bundled libraries share the same source identity.
+get_filename_component(WOWBOX_SOURCE_ROOT "${CMAKE_SOURCE_DIR}/../../../.." ABSOLUTE)
+add_compile_options("-ffile-prefix-map=${WOWBOX_SOURCE_ROOT}=."
+                    "-fdebug-prefix-map=${WOWBOX_SOURCE_ROOT}=.")
+
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2 -Wno-unused-function -Wimplicit-function-declaration")
 
 add_subdirectory(patchelf)

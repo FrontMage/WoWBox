@@ -15,7 +15,7 @@ public class BoxReleaseSpecPreservationTest {
         original.put("boxId", "frontmage-bnet-arm64");
         original.put("futureUserField", new JSONObject().put("opaque", "keep-me"));
         JSONArray layers = new JSONArray();
-        for (String name : new String[]{"wine-runtime", "prefix-template", "cpu-emu-stack", "gpu-driver-stack"}) {
+        for (String name : new String[]{"wine-runtime", "prefix-template", "cpu-emu-stack", "input-bridge-stack", "gpu-driver-stack"}) {
             layers.put(new JSONObject().put("type", name).put("source", "old-" + name)
                     .put("privateExtension", "must-keep-" + name));
         }
@@ -48,12 +48,12 @@ public class BoxReleaseSpecPreservationTest {
         assertEquals("example", resultEnv.getJSONObject("overrides").getString("CUSTOM_ENV"));
         assertEquals("preserve-env", resultEnv.getString("userExtension"));
         JSONArray resultLayers = result.getJSONArray("layers");
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 4; i++) {
             JSONObject item = resultLayers.getJSONObject(i);
             assertEquals("new-" + item.getString("type"), item.getString("source"));
             assertEquals("must-keep-" + item.getString("type"), item.getString("privateExtension"));
         }
-        assertEquals("must-keep-gpu-driver-stack", resultLayers.getJSONObject(3).getString("privateExtension"));
+        assertEquals("must-keep-gpu-driver-stack", resultLayers.getJSONObject(4).getString("privateExtension"));
     }
 
     @Test public void rejectsMissingOrDuplicateManagedLayers() throws Exception {

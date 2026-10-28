@@ -151,6 +151,13 @@ public class BoxDebugServer {
         String route = path;
         int queryIndex = route.indexOf('?');
         if (queryIndex != -1) route = route.substring(0, queryIndex);
+        // Standard release uses only the journaled whole-release migration.
+        // Reject before parsing or invoking any method that can write spec/state.
+        if (BoxLegacyLayerPolicy.isBlockedRoute(BuildConfig.APPLICATION_ID, route)) {
+            JSONObject response = error("Legacy layer mutation is disabled in the standard release");
+            response.put("errorCode", "legacy_layer_mutation_disabled");
+            return response;
+        }
         switch (route) {
             case "/health":
                 return health();

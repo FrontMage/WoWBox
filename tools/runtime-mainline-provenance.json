@@ -20,5 +20,16 @@
     "archiveSHA256": "2beba31f8d0f32c192433f1cd0f8d73e53799e330203d0c7d0d11a883e98ed9d",
     "sourceLicense": "MIT"
   },
-  "scope": "Exact source revisions and checked binary inputs; not a claim that every inherited base-image library is reproducible offline."
+  "scope": "Exact source revisions and checked binary inputs; not a claim that every inherited base-image library is reproducible offline.",
+  "inputBridge": {
+    "repository": "https://github.com/brunodev85/wine-9.2-custom",
+    "commit": "a4ef2bf8963fe4bfab390eebf73336364ce209bc",
+    "sourcePatch": "tools/wine-patches/winhandler-xinput-process-filter.patch",
+    "buildScript": "scripts/build-winhandler-xinput-filtered-arm64x.sh",
+    "originalArchiveSHA256": "437d68591aace9cd599e7e2653abe0333fa7726df1d65d20fc2ffa33a2beff4d",
+    "publicArchiveSHA256": "149a9ca40b1119d01de5599faead07a9748cba511b0039fafaa48b4e0e10078c",
+    "publicationChange": "Only DWARF debug sections removed with llvm-strip; runtime sections and PE ARM64X loader metadata independently compared unchanged.",
+    "publicationScript": "scripts/package-public-xinput.py",
+    "sourceLicense": "Wine component license"
+  }
 }

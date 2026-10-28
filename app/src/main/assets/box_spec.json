@@ -67,10 +67,10 @@
     },
     {
       "type": "input-bridge-stack",
-      "source": "asset://winhandler/winhandler-xinput-wow-filtered-arm64x-437d6859.tzst",
+      "source": "asset://winhandler/winhandler-xinput-wow-filtered-arm64x-149a9ca4.tzst",
       "runtimeIdentifier": "proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff",
       "archive": "tzst",
-      "checksum": "437d68591aace9cd599e7e2653abe0333fa7726df1d65d20fc2ffa33a2beff4d",
+      "checksum": "149a9ca40b1119d01de5599faead07a9748cba511b0039fafaa48b4e0e10078c",
       "target": "/home/xuser-box/.wine/drive_c/windows/system32",
       "replacePolicy": "replace",
       "capabilities": [

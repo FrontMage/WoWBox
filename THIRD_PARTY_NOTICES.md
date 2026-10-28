@@ -14,7 +14,7 @@ The application code retains the Winlator MIT notice in LICENSE. Runtime librari
 | DXVK | [doitsujin/dxvk](https://github.com/doitsujin/dxvk), v2.7.1 / v2.3.1; ARM64EC candidate 83e503b4 | zlib license |
 | vkd3d-proton | [HansKristian-Work/vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton), f1d78e4d79e764afa8146a4333b569c9913e3258 | LGPL; upstream component licenses retained |
 | D8VK | [AlpyneDreams/d8vk](https://github.com/AlpyneDreams/d8vk), 1.0 | zlib |
-| XInput bridge | [brunodev85/wine-9.2-custom](https://github.com/brunodev85/wine-9.2-custom), a4ef2bf8; process-filter patch and build recipe in tools/ and scripts/ | Wine component license; no proprietary XInput DLL distributed |
+| XInput bridge | [brunodev85/wine-9.2-custom](https://github.com/brunodev85/wine-9.2-custom) `a4ef2bf8963fe4bfab390eebf73336364ce209bc`, process-filter patch and build recipe in tools/ and scripts/ | Wine component license; public archive `149a9ca4…` removes DWARF debug sections from v0.1 archive `437d6859…`; runtime sections and ARM64X loader metadata are unchanged. No proprietary XInput DLL is distributed |
 | LSFG layer | [GameNative/lsfg-vk-android](https://github.com/GameNative/lsfg-vk-android), feb7899a6d0f419e27bf47102b6df8ff17e50122 plus three patches in tools/lsfg-vk-android | MIT license included in layer/source; Lossless.dll must be provided by its owner and is not distributed |
 | OpenXR SDK | [KhronosGroup/OpenXR-SDK](https://github.com/KhronosGroup/OpenXR-SDK), 288d3a7e | Apache-2.0; source and license vendored under app/src/main/cpp/OpenXR-SDK |
 | AdrenoTools / linker namespace helpers | app/src/main/cpp/adrenotools | Original licenses and provenance retained |
@@ -28,6 +28,13 @@ The application code retains the Winlator MIT notice in LICENSE. Runtime librari
 ## Base runtime libraries
 
 The preserved Bionic image filesystem also contains open-source dependencies including GLib 2.84.1, GStreamer 1.26.1, FFmpeg 7.1.1, ALSA 1.2.14, GnuTLS 3.8.9, readline 8.2, GMP 6.3.0, x265 4.1, Rubber Band 4.0.0 and FFTW 3.3.10. They retain their GPL/LGPL or other upstream licenses. This FFmpeg build enables GPL/version3 and disables nonfree; it must not be described as an LGPL-only build.
+
+The inherited GnuTLS binaries contain public, fixed upstream test private keys
+used for benchmarking and cryptographic self-tests. The embedded fixtures
+match GnuTLS source revision `0e7b36b58a259d5c67f298adb66291d79b019f22`
+(`src/benchmark-tls.c` and `lib/crypto-selftests-pk.c`); they are not user or
+device credentials and must not be used as real authentication keys. These
+same binaries were already present in the v0.1.0 public runtime.
 
 Upstream source entry points: [GLib](https://gitlab.gnome.org/GNOME/glib), [GStreamer](https://gstreamer.freedesktop.org/src/), [FFmpeg 7.1.1](https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz), [ALSA](https://www.alsa-project.org/), [GnuTLS](https://www.gnutls.org/download.html), [GNU software](https://ftp.gnu.org/gnu/), [x265](https://bitbucket.org/multicoreware/x265_git), [Rubber Band](https://github.com/breakfastquay/rubberband), [FFTW](https://www.fftw.org/download.html), and the public [Termux build definitions](https://github.com/termux/termux-packages).
 

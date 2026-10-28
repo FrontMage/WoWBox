@@ -1,5 +1,7 @@
 package com.winlator.box;
 
+import com.winlator.BuildConfig;
+
 import android.content.Context;
 import android.net.Uri;
 import android.util.Log;
@@ -57,7 +59,7 @@ public class BoxInstaller {
         if (!runtime.isInstalled()) return false;
         BoxSpec active = runtime.getSpec();
         BoxSpec bundled = BoxSpec.fromJsonString(FileUtils.readString(context, BoxSpec.getBundledAssetPath()));
-        for (String type : new String[]{"wine-runtime", "prefix-template", "cpu-emu-stack"}) {
+        for (String type : new String[]{"wine-runtime", "prefix-template", "cpu-emu-stack", "input-bridge-stack"}) {
             BoxSpec.Layer current = findLayer(active, type);
             BoxSpec.Layer desired = findLayer(bundled, type);
             if (current == null || desired == null || !sameLayerExactly(current, desired)) return true;
@@ -97,7 +99,7 @@ public class BoxInstaller {
                 BoxSpec active = BoxSpec.fromJson(new JSONObject(originalSpec));
                 BoxSpec candidate = candidateFromReleaseSnapshot(originalSpec);
                 boolean changed = false;
-                for (String type : new String[]{"wine-runtime", "prefix-template", "cpu-emu-stack"}) {
+                for (String type : new String[]{"wine-runtime", "prefix-template", "cpu-emu-stack", "input-bridge-stack"}) {
                     BoxSpec.Layer current = findLayer(active, type);
                     BoxSpec.Layer desired = findLayer(candidate, type);
                     if (current == null || desired == null || !sameLayerExactly(current, desired)) changed = true;
@@ -119,6 +121,7 @@ public class BoxInstaller {
                 BoxSpec.Layer newWine = findLayer(candidate, "wine-runtime");
                 BoxSpec.Layer newPrefix = findLayer(candidate, "prefix-template");
                 BoxSpec.Layer newFex = findLayer(candidate, "cpu-emu-stack");
+                BoxSpec.Layer newInput = findLayer(candidate, "input-bridge-stack");
                 File imageRoot = new File(appRoot, "imagefs");
                 if (FileUtils.isSymlink(imageRoot) || !imageRoot.isDirectory()) {
                     throw new IllegalStateException("release_upgrade_unsafe_imagefs");
@@ -158,7 +161,14 @@ public class BoxInstaller {
                         stripAssetPrefix(newFex.source), fexCandidate)) {
                     throw new IOException("Cannot extract release FEX");
                 }
-                preserveVerifiedPublicInputBridge(wineDir, wineCandidate);
+                File inputCandidate = new File(stage, "input");
+                if (!inputCandidate.mkdir()) throw new IOException("Cannot create input bridge stage");
+                verifyAssetChecksum(stripAssetPrefix(newInput.source), newInput.checksum);
+                if (!TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context,
+                        stripAssetPrefix(newInput.source), inputCandidate)) {
+                    throw new IOException("Cannot extract release input bridge");
+                }
+                prepareReleaseInputBridge(wineDir, wineCandidate, inputCandidate);
                 ArrayList<BoxReleaseTransaction.Entry> changes = new ArrayList<>();
                 changes.add(new BoxReleaseTransaction.Entry(relativeReleaseTarget(appRoot, wineDir), wineCandidate,
                         originalWineTreeHash,
@@ -194,6 +204,11 @@ public class BoxInstaller {
                     }
                 }
                 addPublicPrefixAdditions(newPrefix, wineCandidate, prefixRoot, appRoot, changes, finalFiles);
+                addReleaseInputPrefixChanges(inputCandidate, prefixRoot, appRoot, changes, finalFiles);
+                String inputRuntimeBase = "/opt/" + BoxRuntime.resolveRuntimeIdentifier(newInput) + "/lib/wine/aarch64-windows/";
+                for (String name : RELEASE_INPUT_NAMES) {
+                    finalFiles.put(inputRuntimeBase + name, new File(inputCandidate, name));
+                }
                 for (String name : new String[]{"libwow64fex.dll", "libarm64ecfex.dll"}) {
                     File source = new File(fexCandidate, name);
                     File target = new File(imageRoot, name);
@@ -226,6 +241,8 @@ public class BoxInstaller {
                 replaceReleaseLayerRecord(state, newWine, releaseCriticalFiles(newWine, imageRoot, wineCandidate, finalFiles, optionalPrefixFiles));
                 replaceReleaseLayerRecord(state, newPrefix, releaseCriticalFiles(newPrefix, imageRoot, wineCandidate, finalFiles, optionalPrefixFiles));
                 replaceReleaseLayerRecord(state, newFex, releaseCriticalFiles(newFex, imageRoot, wineCandidate, finalFiles, optionalPrefixFiles));
+                replaceReleaseLayerRecord(state, newInput, releaseCriticalFiles(newInput, imageRoot, wineCandidate, finalFiles, optionalPrefixFiles));
+                recordReleaseInputIdentity(state, newInput);
                 File candidateSpec = new File(stage, "box-spec.json");
                 File candidateState = new File(stage, "box-state.json");
                 writeReleaseStageFile(candidateSpec,
@@ -279,15 +296,20 @@ public class BoxInstaller {
         BoxSpec.Layer newWine = findLayer(candidate, "wine-runtime");
         BoxSpec.Layer newPrefix = findLayer(candidate, "prefix-template");
         BoxSpec.Layer newFex = findLayer(candidate, "cpu-emu-stack");
+        BoxSpec.Layer newInput = findLayer(candidate, "input-bridge-stack");
         String runtimeId = "proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff";
         if (oldWine == null || oldPrefix == null || oldFex == null || input == null ||
-                newWine == null || newPrefix == null || newFex == null ||
+                newWine == null || newPrefix == null || newFex == null || newInput == null ||
                 !"9ac94fff85c5156e0179e1e11508b1cbb569d4f974bca8838df319327c6f291d".equalsIgnoreCase(oldWine.checksum) ||
                 !"350c6f287ef2008e62439a00f67affc0ef650a7ec2c2b7e8d0bea89e47c2f05a".equalsIgnoreCase(oldPrefix.checksum) ||
                 !"5f1dbc8db81adcbcc25e1e4119b8bb16d4abbeb8d37b06a95249764e21edeae3".equalsIgnoreCase(oldFex.checksum) ||
                 !"437d68591aace9cd599e7e2653abe0333fa7726df1d65d20fc2ffa33a2beff4d".equalsIgnoreCase(input.checksum) ||
                 !runtimeId.equals(oldWine.runtimeIdentifier) || !runtimeId.equals(oldPrefix.runtimeIdentifier) ||
-                !runtimeId.equals(input.runtimeIdentifier) || !oldWine.target.equals(newWine.target) ||
+                !runtimeId.equals(input.runtimeIdentifier) || !runtimeId.equals(newInput.runtimeIdentifier) ||
+                !"/home/xuser-box/.wine/drive_c/windows/system32".equals(input.target) ||
+                !input.target.equals(newInput.target) ||
+                !"149a9ca40b1119d01de5599faead07a9748cba511b0039fafaa48b4e0e10078c".equalsIgnoreCase(newInput.checksum) ||
+                !oldWine.target.equals(newWine.target) ||
                 !runtimeId.equals(newWine.runtimeIdentifier) || !runtimeId.equals(newPrefix.runtimeIdentifier) ||
                 !"086c3fe69c60493c2a43c9625a3b4d755bff2d6ebc3f44e02a0c85f49cc6efd6".equalsIgnoreCase(newWine.checksum) ||
                 !"2beba31f8d0f32c192433f1cd0f8d73e53799e330203d0c7d0d11a883e98ed9d".equalsIgnoreCase(newFex.checksum) ||
@@ -333,22 +355,48 @@ public class BoxInstaller {
         BoxWineBaselineVerifier.verify(wineDir, entries);
     }
 
-    private void preserveVerifiedPublicInputBridge(File oldWine, File newWine) throws Exception {
-        String[] names = {"xinput1_3.dll", "xinput1_4.dll"};
-        String[] expected = {"05ce004a27c25ef13fa60182ae1cc7c993ecf8615891563c59b5e615ede46a45",
-                "b390f99c043ddf0d724607946065dba0cd8dfc2b06744b8edf2714ff300854d0"};
-        for (int i = 0; i < names.length; i++) {
-            File old = new File(oldWine, "lib/wine/aarch64-windows/" + names[i]);
-            File target = new File(newWine, "lib/wine/aarch64-windows/" + names[i]);
-            if (!old.isFile() || FileUtils.isSymlink(old) || !target.isFile() || FileUtils.isSymlink(target) ||
-                    !expected[i].equals(WinePrefixDeltaReconciler.sha256(old))) {
-                throw new IllegalStateException("release_upgrade_input_bridge_mismatch: " + names[i]);
+    private static final String[] RELEASE_INPUT_NAMES = {"xinput1_3.dll", "xinput1_4.dll"};
+    private static final String[] RELEASE_INPUT_OLD_SHA = {
+            "05ce004a27c25ef13fa60182ae1cc7c993ecf8615891563c59b5e615ede46a45",
+            "b390f99c043ddf0d724607946065dba0cd8dfc2b06744b8edf2714ff300854d0"};
+    private static final String[] RELEASE_INPUT_NEW_SHA = {
+            "9cbc7729a73b004695c0f12f7bd7e5903f67d8aeae6d3c0123e9c6502ecd2842",
+            "a7988b896b2b38809e2a673823efdb67f89c8cfe3aaca7cd446771f158b54000"};
+
+    static void requireReleaseInputFile(File file, String expected) throws Exception {
+        if (!file.isFile() || FileUtils.isSymlink(file) ||
+                !expected.equals(WinePrefixDeltaReconciler.sha256(file))) {
+            throw new IllegalStateException("release_upgrade_input_bridge_mismatch: " + file.getName());
+        }
+    }
+
+    private void prepareReleaseInputBridge(File oldWine, File newWine, File input) throws Exception {
+        for (int i = 0; i < RELEASE_INPUT_NAMES.length; i++) {
+            String name = RELEASE_INPUT_NAMES[i];
+            File old = new File(oldWine, "lib/wine/aarch64-windows/" + name);
+            File target = new File(newWine, "lib/wine/aarch64-windows/" + name);
+            File source = new File(input, name);
+            requireReleaseInputFile(old, RELEASE_INPUT_OLD_SHA[i]);
+            requireReleaseInputFile(source, RELEASE_INPUT_NEW_SHA[i]);
+            if (!target.isFile() || FileUtils.isSymlink(target)) {
+                throw new IllegalStateException("release_upgrade_input_bridge_target_invalid: " + name);
             }
-            java.nio.file.Files.copy(old.toPath(), target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
-                    java.nio.file.StandardCopyOption.COPY_ATTRIBUTES);
-            if (!expected[i].equals(WinePrefixDeltaReconciler.sha256(target))) {
-                throw new IOException("Cannot stage input bridge: " + names[i]);
-            }
+            java.nio.file.Files.copy(source.toPath(), target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            requireReleaseInputFile(target, RELEASE_INPUT_NEW_SHA[i]);
+        }
+    }
+
+    private void addReleaseInputPrefixChanges(File input, File prefixRoot, File appRoot,
+            ArrayList<BoxReleaseTransaction.Entry> changes, java.util.Map<String, File> finalFiles) throws Exception {
+        for (int i = 0; i < RELEASE_INPUT_NAMES.length; i++) {
+            String name = RELEASE_INPUT_NAMES[i];
+            File source = new File(input, name);
+            File target = new File(prefixRoot, "system32/" + name);
+            requireReleaseInputFile(source, RELEASE_INPUT_NEW_SHA[i]);
+            requireReleaseInputFile(target, RELEASE_INPUT_OLD_SHA[i]);
+            changes.add(new BoxReleaseTransaction.Entry(relativeReleaseTarget(appRoot, target), source,
+                    RELEASE_INPUT_OLD_SHA[i], RELEASE_INPUT_NEW_SHA[i], false));
+            finalFiles.put("/home/xuser-box/.wine/drive_c/windows/system32/" + name, source);
         }
     }
 
@@ -418,7 +466,7 @@ public class BoxInstaller {
         return records;
     }
 
-    private void replaceReleaseLayerRecord(JSONObject state, BoxSpec.Layer layer, JSONArray critical) throws JSONException {
+    static void replaceReleaseLayerRecord(JSONObject state, BoxSpec.Layer layer, JSONArray critical) throws JSONException {
         JSONArray existing = state.optJSONArray("installedLayers");
         if (existing == null) throw new IllegalStateException("Release layer records are missing");
         JSONObject replacement = new JSONObject();
@@ -438,6 +486,16 @@ public class BoxInstaller {
         state.put("installedLayers", updated);
     }
 
+    static void recordReleaseInputIdentity(JSONObject state, BoxSpec.Layer layer) throws JSONException {
+        if (layer == null || !"input-bridge-stack".equals(layer.type)) {
+            throw new IllegalArgumentException("input_bridge_layer_required");
+        }
+        state.put("wowInputBridgeMigrationVersion", 1);
+        state.put("wowInputBridgeMigrationSource", layer.source);
+        state.put("wowInputBridgeMigrationChecksum", layer.checksum);
+        state.put("wowInputBridgeMigratedAt", System.currentTimeMillis());
+    }
+
     private static String relativeReleaseTarget(File root, File target) throws IOException {
         java.nio.file.Path r = root.toPath().toAbsolutePath().normalize();
         java.nio.file.Path t = target.toPath().toAbsolutePath().normalize();
@@ -449,7 +507,7 @@ public class BoxInstaller {
     static String releaseSpecPreservingUserFields(String originalSpec, BoxSpec candidate) throws Exception {
         JSONObject original = new JSONObject(originalSpec);
         JSONArray layers = original.getJSONArray("layers");
-        for (String type : new String[]{"wine-runtime", "prefix-template", "cpu-emu-stack"}) {
+        for (String type : new String[]{"wine-runtime", "prefix-template", "cpu-emu-stack", "input-bridge-stack"}) {
             BoxSpec.Layer replacement = findLayer(candidate, type);
             if (replacement == null) throw new IllegalStateException("Missing release layer: " + type);
             int found = 0;
@@ -478,7 +536,7 @@ public class BoxInstaller {
         BoxSpec candidate = BoxSpec.fromJson(new JSONObject(originalSpec));
         BoxSpec bundled = BoxSpec.fromJson(new JSONObject(FileUtils.readString(context, BoxSpec.getBundledAssetPath())));
         if (!candidate.boxId.equals(bundled.boxId)) throw new IllegalStateException("bundled_box_id_mismatch");
-        for (String type : new String[]{"wine-runtime", "prefix-template", "cpu-emu-stack"}) {
+        for (String type : new String[]{"wine-runtime", "prefix-template", "cpu-emu-stack", "input-bridge-stack"}) {
             BoxSpec.Layer desired = findLayer(bundled, type);
             if (desired == null) throw new IllegalStateException("bundled_layer_missing: " + type);
             int found = 0;
@@ -710,6 +768,7 @@ public class BoxInstaller {
 
     public boolean installNativeDxWrapperStackUpdate(BoxInstallListener listener) {
         synchronized (BoxInstaller.class) {
+            BoxLegacyLayerPolicy.requireLegacyMutationAllowed(BuildConfig.APPLICATION_ID);
             try {
                 requireIdleWineUpdate();
                 BoxSpec spec = runtime.getSpec();
@@ -874,6 +933,7 @@ public class BoxInstaller {
      */
     public boolean installGpuDriverUpdate(BoxInstallListener listener) {
         synchronized (BoxInstaller.class) {
+            BoxLegacyLayerPolicy.requireLegacyMutationAllowed(BuildConfig.APPLICATION_ID);
             BoxSpec spec = runtime.getSpec();
             try {
                 validateSpec(spec);
@@ -901,6 +961,7 @@ public class BoxInstaller {
      */
     public boolean installGraphicsWrapperStackUpdate(BoxInstallListener listener) {
         synchronized (BoxInstaller.class) {
+            BoxLegacyLayerPolicy.requireLegacyMutationAllowed(BuildConfig.APPLICATION_ID);
             BoxSpec spec = runtime.getSpec();
             try {
                 validateSpec(spec);
@@ -934,6 +995,7 @@ public class BoxInstaller {
      */
     public boolean installCpuEmuStackUpdate(BoxInstallListener listener) {
         synchronized (BoxInstaller.class) {
+            BoxLegacyLayerPolicy.requireLegacyMutationAllowed(BuildConfig.APPLICATION_ID);
             BoxSpec spec = runtime.getSpec();
             try {
                 validateSpec(spec);
@@ -963,6 +1025,7 @@ public class BoxInstaller {
      */
     public boolean installInputBridgeStackUpdate(BoxInstallListener listener) {
         synchronized (BoxInstaller.class) {
+            BoxLegacyLayerPolicy.requireLegacyMutationAllowed(BuildConfig.APPLICATION_ID);
             BoxSpec spec = runtime.getSpec();
             try {
                 requireIdleWineUpdate();
@@ -989,6 +1052,7 @@ public class BoxInstaller {
     /** Installs only the optional LSFG Vulkan layer; never touches the Wine prefix. */
     public boolean installFrameGenerationStackUpdate(BoxInstallListener listener) {
         synchronized (BoxInstaller.class) {
+            BoxLegacyLayerPolicy.requireLegacyMutationAllowed(BuildConfig.APPLICATION_ID);
             BoxSpec spec = runtime.getSpec();
             try {
                 validateSpec(spec);
@@ -1016,6 +1080,7 @@ public class BoxInstaller {
     /** Installs only the selected immutable DXVK archive into the persistent prefix. */
     public boolean installDxWrapperStackUpdate(BoxInstallListener listener) {
         synchronized (BoxInstaller.class) {
+            BoxLegacyLayerPolicy.requireLegacyMutationAllowed(BuildConfig.APPLICATION_ID);
             BoxSpec spec = runtime.getSpec();
             try {
                 validateSpec(spec);
@@ -1044,6 +1109,7 @@ public class BoxInstaller {
      */
     public boolean installWineRuntimeUpdate(BoxInstallListener listener) {
         synchronized (BoxInstaller.class) {
+            BoxLegacyLayerPolicy.requireLegacyMutationAllowed(BuildConfig.APPLICATION_ID);
             BoxSpec spec = runtime.getSpec();
             try {
                 requireIdleWineUpdate();
@@ -1070,6 +1136,7 @@ public class BoxInstaller {
 
     boolean installWineRuntimeCandidate(BoxSpec candidate, BoxInstallListener listener) {
         synchronized (BoxInstaller.class) {
+            BoxLegacyLayerPolicy.requireLegacyMutationAllowed(BuildConfig.APPLICATION_ID);
             File candidateDir = null;
             try {
                 requireIdleWineUpdate();
@@ -1261,6 +1328,7 @@ public class BoxInstaller {
     /** Records the post-wineboot identity of an existing persistent prefix. */
     public boolean reconcileExistingPrefix(BoxInstallListener listener) {
         synchronized (BoxInstaller.class) {
+            BoxLegacyLayerPolicy.requireLegacyMutationAllowed(BuildConfig.APPLICATION_ID);
             BoxSpec spec = runtime.getSpec();
             try {
                 requireIdleWineUpdate();

@@ -404,6 +404,7 @@ public class BoxRuntime {
     }
 
     public synchronized BoxSpec buildSpecWithBundledLayersForUpdate(String... layerTypes) {
+        BoxLegacyLayerPolicy.requireLegacyMutationAllowed(BuildConfig.APPLICATION_ID);
         if (layerTypes == null || layerTypes.length == 0) {
             throw new IllegalArgumentException("layer_type_missing");
         }
@@ -493,6 +494,7 @@ public class BoxRuntime {
      * so the protected prefix remains outside the mutation boundary.
      */
     public synchronized BoxSpec refreshSpecFromBundledAssetForLayerUpdate() {
+        BoxLegacyLayerPolicy.requireLegacyMutationAllowed(BuildConfig.APPLICATION_ID);
         return refreshSpecFromBundledAsset(true);
     }
 
@@ -501,6 +503,7 @@ public class BoxRuntime {
      * launch, environment, or payload selections.
      */
     public synchronized BoxSpec refreshLayerFromBundledAssetForUpdate(String layerType) {
+        BoxLegacyLayerPolicy.requireLegacyMutationAllowed(BuildConfig.APPLICATION_ID);
         if (layerType == null || layerType.trim().isEmpty()) {
             throw new IllegalArgumentException("layer_type_missing");
         }
@@ -1097,6 +1100,7 @@ public class BoxRuntime {
     }
 
     public synchronized JSONObject selectDxvkCandidate(String version) throws JSONException {
+        BoxLegacyLayerPolicy.requireLegacyMutationAllowed(BuildConfig.APPLICATION_ID);
         BoxSpec current = getSpec();
         BoxSpec.DxvkCandidate candidate = current.graphics.findDxvkCandidate(version);
         if (candidate == null) {
@@ -1142,6 +1146,7 @@ public class BoxRuntime {
     }
 
     public synchronized JSONObject selectTurnipCandidate(String version) throws JSONException {
+        BoxLegacyLayerPolicy.requireLegacyMutationAllowed(BuildConfig.APPLICATION_ID);
         BoxSpec current = getSpec();
         BoxSpec.TurnipCandidate candidate = current.graphics.findTurnipCandidate(version);
         if (candidate == null) {

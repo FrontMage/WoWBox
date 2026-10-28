@@ -1,5 +1,12 @@
 # Facts
 
+- The preview runtime uses a public XInput bridge archive with debug sections
+  removed and records the inherited v0.1 archive as the upgrade baseline. The
+  standard package disables legacy single-layer debug mutations so they cannot
+  bypass the complete release upgrade transaction.
+  Source: config-evidence (tools/runtime-mainline-provenance.json:24-34).
+  Source: code-evidence (app/src/main/java/com/winlator/box/BoxLegacyLayerPolicy.java:3-21).
+
 - The standard preview build uses Android package `com.winlator.llm`, version
   code 18 and version name `0.2.0-preview`. Its versioned runtime inputs and
   source revisions are listed in `tools/runtime-mainline-provenance.json`.

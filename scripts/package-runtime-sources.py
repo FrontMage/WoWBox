@@ -167,6 +167,14 @@ def main():
                     "wineSourceUrl": "https://github.com/FrontMage/proton-wine",
                     "fexSourceUrl": "https://github.com/FrontMage/FEX",
                     "fontPatch": "wine-openfonts-mainline.patch",
+                    "inputBridge": {
+                        "sourceUrl": "https://github.com/brunodev85/wine-9.2-custom",
+                        "sourceCommit": "a4ef2bf8963fe4bfab390eebf73336364ce209bc",
+                        "originalArchiveSha256": "437d68591aace9cd599e7e2653abe0333fa7726df1d65d20fc2ffa33a2beff4d",
+                        "publicArchiveSha256": "149a9ca40b1119d01de5599faead07a9748cba511b0039fafaa48b4e0e10078c",
+                        "publicationChange": "LLVM --strip-debug removes DWARF only; runtime sections and ARM64X loader metadata are verified unchanged.",
+                        "packagingScript": "Integration/scripts/package-public-xinput.py",
+                    },
                     "fexDependencies": modules,
                     "previousPublicBundleSha256": OLD_SOURCE_SHA,
                     "omittedPreviousSourceSymlinks": omitted_previous_links,
@@ -174,12 +182,15 @@ def main():
                 }
                 add_bytes("SOURCE_MANIFEST.json", (json.dumps(metadata, indent=2) + "\n").encode())
                 add_bytes("wine-openfonts-mainline.patch", (ROOT / "tools/wine-openfonts-mainline.patch").read_bytes())
+                add_bytes("Integration/scripts/package-public-xinput.py", (ROOT / "scripts/package-public-xinput.py").read_bytes())
                 add_bytes("README.md", (
                     "# WoW Box v0.2 runtime source inputs\n\n"
                     "`Wine/` and `FEX/` are exported from the exact public commits in SOURCE_MANIFEST.json. "
                     "The Wine binary was built from that Wine commit, with the four font substitutions "
                     "in wine-openfonts-mainline.patch applied to the distributed INF data. "
                     "FEX submodule source is included except test-binary repositories and generated docs. "
+                    "The XInput bridge source and filter patch are referenced in SOURCE_MANIFEST.json; "
+                    "its public packaging script removes only DWARF from the original v0.1 build. "
                     "VulkanWrapper/ and Integration/ are unchanged from the v0.1 public source bundle. "
                     "Consult WoW Box THIRD_PARTY_NOTICES.md for component licenses and the known "
                     "provenance limits of inherited base-image libraries.\n"

@@ -44,7 +44,13 @@ public class BoxReleaseTransactionTest {
                     java.nio.file.Paths.get("wine.dll"));
             Files.createSymbolicLink(new File(newWine, "lib/alias.dll").toPath(),
                     java.nio.file.Paths.get("wine.dll"));
+            for (String name : new String[]{"xinput1_3.dll", "xinput1_4.dll"}) {
+                write(new File(oldWine, "lib/" + name), "old-" + name);
+                write(new File(newWine, "lib/" + name), "new-" + name);
+            }
             entry("files/imagefs/opt/wine", newWine, oldWine, true);
+            addFile("files/imagefs/prefix/system32/xinput1_3.dll", "old-xinput1_3.dll", "new-xinput1_3.dll");
+            addFile("files/imagefs/prefix/system32/xinput1_4.dll", "old-xinput1_4.dll", "new-xinput1_4.dll");
 
             addFile("files/imagefs/prefix/system32/ntdll.dll", "old-prefix", "new-prefix");
             addFile("files/imagefs/fex/libarm64ecfex.dll", "old-fex", "new-fex");
@@ -68,6 +74,10 @@ public class BoxReleaseTransactionTest {
 
         void verifyOriginal() throws Exception {
             assertEquals("old-wine", read(new File(root, "files/imagefs/opt/wine/lib/wine.dll")));
+            for (String name : new String[]{"xinput1_3.dll", "xinput1_4.dll"}) {
+                assertEquals("old-" + name, read(new File(root, "files/imagefs/opt/wine/lib/" + name)));
+                assertEquals("old-" + name, read(new File(root, "files/imagefs/prefix/system32/" + name)));
+            }
             assertEquals("old-prefix", read(new File(root, "files/imagefs/prefix/system32/ntdll.dll")));
             assertEquals("old-fex", read(new File(root, "files/imagefs/fex/libarm64ecfex.dll")));
             assertEquals("old-fex32", read(new File(root, "files/imagefs/fex/libwow64fex.dll")));
@@ -78,6 +88,10 @@ public class BoxReleaseTransactionTest {
 
         void verifyCandidate() throws Exception {
             assertEquals("new-wine", read(new File(root, "files/imagefs/opt/wine/lib/wine.dll")));
+            for (String name : new String[]{"xinput1_3.dll", "xinput1_4.dll"}) {
+                assertEquals("new-" + name, read(new File(root, "files/imagefs/opt/wine/lib/" + name)));
+                assertEquals("new-" + name, read(new File(root, "files/imagefs/prefix/system32/" + name)));
+            }
             assertTrue(Files.isSymbolicLink(new File(root, "files/imagefs/opt/wine/lib/alias.dll").toPath()));
             assertEquals("new-prefix", read(new File(root, "files/imagefs/prefix/system32/ntdll.dll")));
             assertEquals("new-fex", read(new File(root, "files/imagefs/fex/libarm64ecfex.dll")));

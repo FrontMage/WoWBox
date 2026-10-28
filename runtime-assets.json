@@ -4,12 +4,12 @@
   "bundle": {
     "filename": "WoWBox-v0.2.0-preview-runtime-assets.tar.gz",
     "url": "https://github.com/FrontMage/WoWBox/releases/download/v0.2.0-preview/WoWBox-v0.2.0-preview-runtime-assets.tar.gz",
-    "sha256": "89cc2606bde1e8b01d986adc45f7f24fd859c5a9cf043586f798dc9660c3464f"
+    "sha256": "b650aa914f39a26410d3c9ee17da726bb6e621e7862dcb23080b0bc2ec210ec7"
   },
   "files": [
     {
       "path": "app/src/main/assets/box_spec.json",
-      "sha256": "a9ef5502f38307771132cb18cd1d2cdd8657927a33dcdc3826228285e32ef367",
+      "sha256": "486e4782b2db7c6f280ee2954daa58042546bbd7cdfa6133f782f967dc7f71c3",
       "sizeBytes": 9877,
       "mode": 420
     },
@@ -315,8 +315,8 @@
     },
     {
       "path": "app/src/main/assets/managed_assets.json",
-      "sha256": "4a19812d6f1ffef6649a32620685ae4e7a3ca49255ae39a1b4b2a127a6eb1c33",
-      "sizeBytes": 10167,
+      "sha256": "cd638f9c4ab33dff46ed084f746776b426799b6e86eec46adc8e83e18773d959",
+      "sizeBytes": 10246,
       "mode": 420
     },
     {
@@ -422,9 +422,9 @@
       "mode": 420
     },
     {
-      "path": "app/src/main/assets/winhandler/winhandler-xinput-wow-filtered-arm64x-437d6859.tzst",
-      "sha256": "437d68591aace9cd599e7e2653abe0333fa7726df1d65d20fc2ffa33a2beff4d",
-      "sizeBytes": 31348,
+      "path": "app/src/main/assets/winhandler/winhandler-xinput-wow-filtered-arm64x-149a9ca4.tzst",
+      "sha256": "149a9ca40b1119d01de5599faead07a9748cba511b0039fafaa48b4e0e10078c",
+      "sizeBytes": 20126,
       "mode": 420
     }
   ]
