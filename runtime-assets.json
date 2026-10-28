@@ -4,12 +4,12 @@
   "bundle": {
     "filename": "WoWBox-v0.2.0-preview-runtime-assets.tar.gz",
     "url": "https://github.com/FrontMage/WoWBox/releases/download/v0.2.0-preview/WoWBox-v0.2.0-preview-runtime-assets.tar.gz",
-    "sha256": "b650aa914f39a26410d3c9ee17da726bb6e621e7862dcb23080b0bc2ec210ec7"
+    "sha256": "0da7587b9b88057d48ddfd57fadee7e3f5f1e9fa699bf2cb8a56d57c91952c02"
   },
   "files": [
     {
       "path": "app/src/main/assets/box_spec.json",
-      "sha256": "486e4782b2db7c6f280ee2954daa58042546bbd7cdfa6133f782f967dc7f71c3",
+      "sha256": "ff5512e83cdd70ab8ed0a6e97f3ba5cbf6b91a35d7bea977ae7bdc476cc0d589",
       "sizeBytes": 9877,
       "mode": 420
     },
@@ -315,7 +315,7 @@
     },
     {
       "path": "app/src/main/assets/managed_assets.json",
-      "sha256": "cd638f9c4ab33dff46ed084f746776b426799b6e86eec46adc8e83e18773d959",
+      "sha256": "9e08e2851d334afb4d92a7f603d59d91c5700e397607c211de76f9f9d00a27a7",
       "sizeBytes": 10246,
       "mode": 420
     },
@@ -368,9 +368,9 @@
       "mode": 420
     },
     {
-      "path": "app/src/main/assets/wine-runtime-wowbox-mainline-openfonts-086c3fe6.txz",
-      "sha256": "086c3fe69c60493c2a43c9625a3b4d755bff2d6ebc3f44e02a0c85f49cc6efd6",
-      "sizeBytes": 143881768,
+      "path": "app/src/main/assets/wine-runtime-wowbox-mainline-openfonts-56f206c4.txz",
+      "sha256": "56f206c4eb1da0d297ab6e73041e000793b05d285b7edf96e9e84914babe9de1",
+      "sizeBytes": 143881812,
       "mode": 420
     },
     {

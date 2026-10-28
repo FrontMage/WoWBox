@@ -15,7 +15,7 @@ import subprocess
 import tarfile
 
 OLD_SHA = "9ac94fff85c5156e0179e1e11508b1cbb569d4f974bca8838df319327c6f291d"
-NEW_SHA = "086c3fe69c60493c2a43c9625a3b4d755bff2d6ebc3f44e02a0c85f49cc6efd6"
+NEW_SHA = "56f206c4eb1da0d297ab6e73041e000793b05d285b7edf96e9e84914babe9de1"
 OLD_PREFIX_SHA = "350c6f287ef2008e62439a00f67affc0ef650a7ec2c2b7e8d0bea89e47c2f05a"
 RUNTIME_ID = "proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff"
 WINEBOOT_OPTIONAL_NAMES = frozenset({

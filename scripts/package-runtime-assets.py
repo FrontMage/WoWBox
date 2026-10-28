@@ -12,7 +12,7 @@ OLD_WINE = "app/src/main/assets/wine-runtime-wowbox-openfonts-9ac94fff.txz"
 OLD_FEX = "app/src/main/assets/fexcore/fexcore-2508-frontmage-bnet-99d69a-native-mock-jemalloc-5f1dbc8d.tzst"
 OLD_INPUT_BRIDGE = "app/src/main/assets/winhandler/winhandler-xinput-wow-filtered-arm64x-437d6859.tzst"
 NEW_FILES = (
-    "app/src/main/assets/wine-runtime-wowbox-mainline-openfonts-086c3fe6.txz",
+    "app/src/main/assets/wine-runtime-wowbox-mainline-openfonts-56f206c4.txz",
     "app/src/main/assets/fexcore/fexcore-2508-wowbox-mainline-7519b960-2beba31f.tzst",
     "app/src/main/assets/wine_prefix_delta/wowbox-v010-to-mainline.json",
     "app/src/main/assets/wine_runtime_baseline/wowbox-v010-tree.json",

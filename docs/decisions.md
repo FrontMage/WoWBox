@@ -1,5 +1,11 @@
 # Decisions
 
+- Use packaged Source Han Sans CN as a non-overwriting Wine DirectWrite
+  replacement for missing `MS Gothic` and `Noto Sans CJK TC` families.
+  The alias preserves any user mapping; CN-style glyphs for TC fallback may
+  differ regionally.
+  Source: code-evidence (scripts/package-mainline-wine.py:20-70).
+
 - Disable legacy single-layer debug mutations for the standard package so
   runtime updates cannot bypass its complete release upgrade transaction;
   preserve those endpoints for other package identities.

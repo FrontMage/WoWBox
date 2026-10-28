@@ -8,10 +8,10 @@
     "repository": "https://github.com/FrontMage/proton-wine",
     "commit": "a545dee5aa1991ba77985a2cfe8d6a490152d166",
     "buildArchiveSHA256": "d2e1ed2f22825904a0acc8dacd6e4d534482133cf16952d11928951fe23ce313",
-    "publicArchiveSHA256": "086c3fe69c60493c2a43c9625a3b4d755bff2d6ebc3f44e02a0c85f49cc6efd6",
-    "publicationChange": "Only four font-family substitution entries in share/wine/wine.inf differ; all other archive members verified against the pinned build.",
+    "publicArchiveSHA256": "56f206c4eb1da0d297ab6e73041e000793b05d285b7edf96e9e84914babe9de1",
+    "publicationChange": "Only font substitutions and two non-overwriting CJK fallback aliases in share/wine/wine.inf differ; other archive members verified against the pinned build.",
     "correspondingSourcePatch": "tools/wine-openfonts-mainline.patch",
-    "sourcePatchSHA256": "2b4400bec0081c08ff295ca029a81277be140eb30bc09eec60102e99df48d86d",
+    "sourcePatchSHA256": "1c1dc9cd006beadd7b40c7696f9c1f8e5ef3e1068d2ce3614881399e66d7e6d7",
     "sourceLicense": "LGPL-2.1-or-later"
   },
   "fex": {

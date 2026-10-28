@@ -55,10 +55,10 @@
     },
     {
       "type": "wine-runtime",
-      "source": "asset://wine-runtime-wowbox-mainline-openfonts-086c3fe6.txz",
+      "source": "asset://wine-runtime-wowbox-mainline-openfonts-56f206c4.txz",
       "runtimeIdentifier": "proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff",
       "archive": "txz",
-      "checksum": "086c3fe69c60493c2a43c9625a3b4d755bff2d6ebc3f44e02a0c85f49cc6efd6",
+      "checksum": "56f206c4eb1da0d297ab6e73041e000793b05d285b7edf96e9e84914babe9de1",
       "target": "/opt/proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff",
       "replacePolicy": "replace",
       "capabilities": [

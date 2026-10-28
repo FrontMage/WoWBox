@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Prepare the public open-font Wine archive from the pinned mainline build.
 
-Only four font substitutions in share/wine/wine.inf may change. The source
-archive is never modified. Pass the matching loader/wine.inf.in to generate
-the corresponding-source patch. See the emitted receipt for input/output SHA.
+Only public-font substitutions and non-overwriting fallback aliases in
+share/wine/wine.inf may change. The source archive is never modified. Pass
+the matching loader/wine.inf.in to generate the corresponding-source patch.
+See the emitted receipt for input/output SHA.
 """
 import argparse
 import copy
@@ -12,6 +13,7 @@ import hashlib
 import io
 import json
 from pathlib import Path
+import re
 import subprocess
 import tarfile
 
@@ -22,6 +24,12 @@ SUBSTITUTIONS = {
     "Segoe UI Semibold": "DejaVu Sans",
     "Segoe UI": "DejaVu Sans",
 }
+FALLBACK_FAMILIES = ("MS Gothic", "Noto Sans CJK TC")
+FALLBACK_ALIASES = tuple(
+    f'HKCU,Software\\Wine\\Fonts\\Replacements,"{family}",'
+    '0x00000002,"Source Han Sans CN"'
+    for family in FALLBACK_FAMILIES
+)
 
 
 def digest(path):
@@ -34,12 +42,29 @@ def digest(path):
 
 def openfont_inf(data):
     text = data.decode("utf-8")
+    section = re.search(r"(?ms)^\[Fonts\]\r?\n(.*?)(?=^\[|\Z)", text)
+    if not section:
+        raise ValueError("Expected Wine INF Fonts section")
+    body = section.group(1)
+    for family in FALLBACK_FAMILIES:
+        pattern = (r'(?im)^\s*HKCU\s*,\s*Software\\Wine\\Fonts\\Replacements\s*,\s*"'
+                   + re.escape(family) + r'"\s*,')
+        if re.search(pattern, body):
+            raise ValueError(f"Wine INF already defines {family} fallback")
     for family, target in SUBSTITUTIONS.items():
         old = f'HKCU,Software\\Wine\\Fonts\\Replacements,"{family}",,"Times New Roman"'
         new = f'HKCU,Software\\Wine\\Fonts\\Replacements,"{family}",,"{target}"'
-        if text.count(old) != 1:
+        if body.count(old) != 1:
             raise ValueError(f"Expected one original font row for {family}")
-        text = text.replace(old, new)
+        body = body.replace(old, new)
+    # FLG_ADDREG_NOCLOBBER: preserve an existing user mapping. DirectWrite
+    # itself prefers an installed real family over its replacement alias.
+    anchor = 'HKCU,Software\\Wine\\Fonts\\Replacements,"Segoe UI",,"DejaVu Sans"'
+    if body.count(anchor) != 1:
+        raise ValueError("Expected one public Segoe UI replacement row")
+    newline = "\r\n" if "\r\n" in body else "\n"
+    body = body.replace(anchor, anchor + newline + newline.join(FALLBACK_ALIASES))
+    text = text[:section.start(1)] + body + text[section.end(1):]
     return text.encode("utf-8")
 
 

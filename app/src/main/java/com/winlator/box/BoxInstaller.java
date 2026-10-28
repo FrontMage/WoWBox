@@ -205,6 +205,12 @@ public class BoxInstaller {
                 }
                 addPublicPrefixAdditions(newPrefix, wineCandidate, prefixRoot, appRoot, changes, finalFiles);
                 addReleaseInputPrefixChanges(inputCandidate, prefixRoot, appRoot, changes, finalFiles);
+                // Apply the new Wine INF to an existing v0.1 prefix on the
+                // next start. The original marker participates in the same
+                // rollback journal as the runtime and user configuration.
+                BoxReleaseTransaction.Entry winebootTimestamp = WinebootTimestamp.prepare(appRoot,
+                        new File(imageRoot, "home/xuser-box/.wine"), stage);
+                if (winebootTimestamp != null) changes.add(winebootTimestamp);
                 String inputRuntimeBase = "/opt/" + BoxRuntime.resolveRuntimeIdentifier(newInput) + "/lib/wine/aarch64-windows/";
                 for (String name : RELEASE_INPUT_NAMES) {
                     finalFiles.put(inputRuntimeBase + name, new File(inputCandidate, name));
@@ -264,6 +270,8 @@ public class BoxInstaller {
                 BoxReleaseTransaction.apply(appRoot, new File(boxDir, "release-upgrade-transaction"), changes, () -> {
                     // The files are active but backups remain available. Avoid
                     // running unrelated startup migrations while verifying them.
+                    if (winebootTimestamp != null)
+                        WinebootTimestamp.requireActivatedInfHasNonzeroTimestamp(wineDir);
                     runtime.setCachedSpecForReleaseValidation(candidate);
                     if (!BoxDebugServer.get(context).verifyLayers().optBoolean("ok", false)) {
                         throw new IllegalStateException("release_upgrade_post_verify_failed");
@@ -311,7 +319,7 @@ public class BoxInstaller {
                 !"149a9ca40b1119d01de5599faead07a9748cba511b0039fafaa48b4e0e10078c".equalsIgnoreCase(newInput.checksum) ||
                 !oldWine.target.equals(newWine.target) ||
                 !runtimeId.equals(newWine.runtimeIdentifier) || !runtimeId.equals(newPrefix.runtimeIdentifier) ||
-                !"086c3fe69c60493c2a43c9625a3b4d755bff2d6ebc3f44e02a0c85f49cc6efd6".equalsIgnoreCase(newWine.checksum) ||
+                !"56f206c4eb1da0d297ab6e73041e000793b05d285b7edf96e9e84914babe9de1".equalsIgnoreCase(newWine.checksum) ||
                 !"2beba31f8d0f32c192433f1cd0f8d73e53799e330203d0c7d0d11a883e98ed9d".equalsIgnoreCase(newFex.checksum) ||
                 !sameLayerExceptWinePrefixDelta(oldPrefix, newPrefix) ||
                 !isInPlaceWineCandidateLayer(oldWine, newWine)) {

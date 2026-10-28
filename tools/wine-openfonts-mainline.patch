@@ -1,6 +1,6 @@
 --- a/loader/wine.inf.in
 +++ b/loader/wine.inf.in
-@@ -557,10 +557,10 @@
+@@ -557,10 +557,12 @@
  HKLM,%FontsNT%,"Times New Roman (TrueType)",,"times.ttf"
  HKLM,%FontsNT%,"Webdings (TrueType)",,"webdings.ttf"
  HKLM,%FontsNT%,"Wingdings (TrueType)",,"wingdings.ttf"
@@ -12,6 +12,8 @@
 +HKCU,Software\Wine\Fonts\Replacements,"Verdana",,"DejaVu Sans"
 +HKCU,Software\Wine\Fonts\Replacements,"Segoe UI Semibold",,"DejaVu Sans"
 +HKCU,Software\Wine\Fonts\Replacements,"Segoe UI",,"DejaVu Sans"
++HKCU,Software\Wine\Fonts\Replacements,"MS Gothic",0x00000002,"Source Han Sans CN"
++HKCU,Software\Wine\Fonts\Replacements,"Noto Sans CJK TC",0x00000002,"Source Han Sans CN"
  
  [MCI]
  HKLM,%Mci32Str%,"AVIVideo",,"mciavi32.dll"

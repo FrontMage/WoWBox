@@ -186,8 +186,8 @@ def main():
                 add_bytes("README.md", (
                     "# WoW Box v0.2 runtime source inputs\n\n"
                     "`Wine/` and `FEX/` are exported from the exact public commits in SOURCE_MANIFEST.json. "
-                    "The Wine binary was built from that Wine commit, with the four font substitutions "
-                    "in wine-openfonts-mainline.patch applied to the distributed INF data. "
+                    "The Wine binary was built from that Wine commit, with the public-font substitutions "
+                    "and fallback aliases in wine-openfonts-mainline.patch applied to the distributed INF data. "
                     "FEX submodule source is included except test-binary repositories and generated docs. "
                     "The XInput bridge source and filter patch are referenced in SOURCE_MANIFEST.json; "
                     "its public packaging script removes only DWARF from the original v0.1 build. "

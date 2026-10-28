@@ -1,5 +1,9 @@
 # Facts
 
+- Wine's packaged INF adds non-overwriting `MS Gothic` and `Noto Sans CJK TC`
+  DirectWrite replacements pointing to the bundled Source Han Sans CN font.
+  Source: code-evidence (scripts/package-mainline-wine.py:20-70).
+
 - The preview runtime uses a public XInput bridge archive with debug sections
   removed and records the inherited v0.1 archive as the upgrade baseline. The
   standard package disables legacy single-layer debug mutations so they cannot
