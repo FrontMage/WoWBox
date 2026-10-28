@@ -1,8 +1,10 @@
 # Open Issues
 
-- Final device game and short stability validation remains incomplete on NOVA;
-  Thor is deferred by the user. Do not represent emulator results as device
-  gameplay or broad compatibility, or treat deferred coverage as passed.
+- On NOVA the final candidate reached the Titan login screen and ran briefly
+  with Battle.net open. The selected trial account had no game time, so world
+  entry was not tested. Full Battle.net installer completion and a seeded
+  stale-DLL-cache test remain unverified for this candidate. Thor testing is
+  deferred; do not represent it or broad compatibility as passed.
 - The standard package does not expose a MapleStory shortcut or RenderDoc UI;
   their end-to-end use is not validated for this preview.
 - XR remains disabled until its process lifecycle is synchronized with runtime
