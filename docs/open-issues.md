@@ -1,10 +1,12 @@
 # Open Issues
 
-- On NOVA the final candidate reached the Titan login screen and ran briefly
-  with Battle.net open. The selected trial account had no game time, so world
-  entry was not tested. Full Battle.net installer completion and a seeded
-  stale-DLL-cache test remain unverified for this candidate. Thor testing is
-  deferred; do not represent it or broad compatibility as passed.
+- On NOVA the earlier `77b5d903...` candidate reached the Titan login screen
+  and ran briefly with Battle.net open. The selected trial account had no
+  game time, so world entry was not tested. The later `3fcdf431...` font
+  candidate has not been tested through this game path on NOVA. Full
+  Battle.net installer completion and a seeded stale-DLL-cache test remain
+  unverified for the final candidate. Thor testing is deferred; do not
+  represent it or broad compatibility as passed.
 - NOVA Battle.net Chinese became readable after adding a diagnostic
   `Noto Sans CJK TC` alias to the existing bundled Source Han Sans CN. The
   packaged INF includes this alias; its v0.1 emulator upgrade and Wine first
