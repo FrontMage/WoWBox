@@ -21,5 +21,4 @@
 - Some inherited imagefs and graphics libraries lack verified matching source,
   Android patches and license provenance, including FFmpeg/x264, GnuTLS,
   PulseAudio and Mesa. Obtain the corresponding materials or rebuild from
-  auditable sources before publishing these runtime assets; see
-  `THIRD_PARTY_NOTICES.md` for the known boundaries.
+  auditable sources; see `THIRD_PARTY_NOTICES.md` for the known boundaries.

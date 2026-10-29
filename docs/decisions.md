@@ -1,5 +1,9 @@
 # Decisions
 
+- Publish the v0.2 preview on the user's request with the incomplete device
+  verification and inherited-runtime source provenance openly disclosed.
+  Source: user-confirmed (2026-10-29: 直接公开吧).
+
 - Use packaged Source Han Sans CN as a non-overwriting Wine DirectWrite
   replacement for missing `MS Gothic` and `Noto Sans CJK TC` families.
   The alias preserves any user mapping; CN-style glyphs for TC fallback may

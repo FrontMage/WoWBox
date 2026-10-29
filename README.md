@@ -2,11 +2,6 @@
 
 # WoW Box
 
-> **此分支公开 v0.2.0 预览版源码，APK 和运行资源尚未发布。**
-> 下方 v0.2.0 下载地址及资源获取命令在发布前不可用；当前可用版本是
-> [v0.1.0 预览版](https://github.com/FrontMage/WoWBox/releases/tag/v0.1.0)。
-> 待完成的验证与继承运行库来源见 [未解决事项](docs/open-issues.md)。
-
 基于 [Winlator](https://github.com/brunodev85/winlator) 的 Android 应用，为 Battle.net 和 World of Warcraft 提供预先配置的 Wine/FEX 运行环境。
 
 **日常使用不需要 AI 助手、Codex、ADB 或电脑。** 下载 APK 后，按照下面的 Android 界面操作即可。
