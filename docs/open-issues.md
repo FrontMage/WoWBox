@@ -1,10 +1,16 @@
 # Open Issues
 
+- On RedMagic NX809J, a `D:\TestD3D.exe` warm launch was accepted and
+  sent to WinHandler but the target process was not observed after resume
+  in both the published v0.3.0 and the patched candidate. Cold launches
+  succeeded. The cause and behavior for other working directories remain
+  unverified; this is not proof that all warm launches fail.
+
 - RedMagic V39 plus system Vulkan host composition cleared black blocks in
   one user-confirmed WoW Forever D3D12 scene, but Battle.net and WoW exits
   and frame pacing complaints remain unresolved. The CEF V8 flag is a
-  mitigation only and did not eliminate reported exits. The separate Wine
-  RtlWaitOnAddress backport has not been installed or validated on Android.
+  mitigation only and did not eliminate reported exits. The packaged Wine RtlWaitOnAddress backport has finite diagnostic coverage;
+  its effect on the reported Battle.net/WoW exits remains unproven.
   Source: user-confirmed (2026-11-09: report remaining crashes and stutter).
 
 - The standard 0.3.0 candidate passed short RedMagic fresh-install and 0.2

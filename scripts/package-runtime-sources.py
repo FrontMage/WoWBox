@@ -19,7 +19,9 @@ import subprocess
 import tarfile
 
 ROOT = Path(__file__).resolve().parents[1]
-WINE = "a545dee5aa1991ba77985a2cfe8d6a490152d166"
+WINE = "0ba238876cb4aff00bb0a9a21ad97e8d9e6887ea"
+WINE_BASE = "a545dee5aa1991ba77985a2cfe8d6a490152d166"
+WINE_UPSTREAM_FIX = "81e52628b25ac173d04796e8a9b9cda637d3e233"
 FEX = "7519b9605209e9e19eaf7be669dae7c1848fe5f1"
 PROTON = "212f9e729f7f79a582aa1def2d313f21b4c2181c"
 OLD_SOURCE_SHA = "2e1c0328e08ef6848b43d5b367710738bf21b59525bae2c8a7f44e84c37e243a"
@@ -164,6 +166,9 @@ def main():
                     "protonCommit": PROTON,
                     "release": "v0.3.0",
                     "wineCommit": WINE,
+                    "wineBaseCommit": WINE_BASE,
+                    "wineUpstreamFixCommit": WINE_UPSTREAM_FIX,
+                    "wineBinaryProvenance": "Original base Wine archive with three Android ntdll PE files rebuilt from wineCommit; all other archive members remain from wineBaseCommit, with the existing public-font INF patch.",
                     "fexCommit": FEX,
                     "wineSourceUrl": "https://github.com/FrontMage/proton-wine",
                     "fexSourceUrl": "https://github.com/FrontMage/FEX",
@@ -195,9 +200,10 @@ def main():
                 add_bytes("Integration/scripts/package-public-xinput.py", (ROOT / "scripts/package-public-xinput.py").read_bytes())
                 add_bytes("README.md", (
                     "# WoW Box v0.3 runtime source inputs\n\n"
-                    "`Wine/` and `FEX/` are exported from the exact public commits in SOURCE_MANIFEST.json. "
-                    "The Wine binary was built from that Wine commit, with the public-font substitutions "
-                    "and fallback aliases in wine-openfonts-mainline.patch applied to the distributed INF data. "
+                    "`Wine/` and `FEX/` are exported from the exact commits in SOURCE_MANIFEST.json. "
+                    "Three Android Wine ntdll PE files were rebuilt from the patched Wine commit; other "
+                    "Wine members come from the recorded base build. The distributed INF includes "
+                    "the substitutions and fallback aliases in wine-openfonts-mainline.patch. "
                     "FEX submodule source is included except test-binary repositories and generated docs. "
                     "The XInput bridge source and filter patch are referenced in SOURCE_MANIFEST.json; "
                     "its public packaging script removes only DWARF from the original v0.1 build. "

@@ -140,7 +140,19 @@ public class ShortcutsFragment extends Fragment {
                 Intent intent = new Intent(activity, XServerDisplayActivity.class);
                 intent.putExtra("container_id", shortcut.container.id);
                 intent.putExtra("shortcut_path", shortcut.file.getPath());
-                activity.startActivity(intent);
+                String capability;
+                try { capability = com.winlator.box.BoxLaunchLease.enabled() ?
+                        com.winlator.box.BoxLaunchLease.process().reserve() : null; }
+                catch (IllegalStateException busy) {
+                    android.widget.Toast.makeText(activity, R.string.box_update_running, android.widget.Toast.LENGTH_LONG).show();
+                    return;
+                }
+                if (capability != null) intent.putExtra("box_launch_capability", capability);
+                try { activity.startActivity(intent); }
+                catch (RuntimeException failure) {
+                    com.winlator.box.BoxLaunchLease.process().cancel(capability);
+                    throw failure;
+                }
             }
             else XrActivity.openIntent(activity, shortcut.container.id, shortcut.file.getPath());
         }

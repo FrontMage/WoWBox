@@ -66,6 +66,23 @@ public class LegacyRedMagicGpuDecisionTest {
         BoxSpec changed=spec(); changed.layers.get(1).checksum="another-wine";
         assertFalse(LegacyRedMagicGpuDecision.applies(changed,state(),new HashMap<>(),true,"com.winlator.llm"));
     }
+    @Test public void exactPatchedWineKeepsEligibleButMixedIdentityFailsClosed() throws Exception {
+        BoxSpec patched = spec();
+        BoxSpec.Layer wine = patched.layers.get(1);
+        wine.source = LegacyRedMagicGpuDecision.RWOA_WINE_SOURCE;
+        wine.checksum = LegacyRedMagicGpuDecision.RWOA_WINE_SHA;
+        JSONObject state = state();
+        JSONObject row = state.getJSONArray("installedLayers").getJSONObject(1);
+        row.put("source", wine.source).put("checksum", wine.checksum);
+        assertTrue(LegacyRedMagicGpuDecision.applies(patched, state, new HashMap<>(), true, "com.winlator.llm"));
+        wine.source = LegacyRedMagicGpuDecision.WINE_SOURCE;
+        row.put("source", wine.source);
+        assertFalse(LegacyRedMagicGpuDecision.applies(patched, state, new HashMap<>(), true, "com.winlator.llm"));
+        wine.source = LegacyRedMagicGpuDecision.RWOA_WINE_SOURCE;
+        wine.checksum = LegacyRedMagicGpuDecision.WINE_SHA;
+        row.put("source", wine.source).put("checksum", wine.checksum);
+        assertFalse(LegacyRedMagicGpuDecision.applies(patched, state, new HashMap<>(), true, "com.winlator.llm"));
+    }
     @Test public void extraMissingDuplicateOrChangedLayerKeepsOriginalDriver() throws Exception {
         BoxSpec extra=spec(); BoxSpec.Layer custom=new BoxSpec.Layer(); custom.type="custom-layer"; extra.layers.add(custom);
         assertFalse(LegacyRedMagicGpuDecision.applies(extra,state(),new HashMap<>(),true,"com.winlator.llm"));

@@ -4,13 +4,13 @@
   "bundle": {
     "filename": "WoWBox-v0.3.0-runtime-assets.tar.gz",
     "url": "https://github.com/FrontMage/WoWBox/releases/download/v0.3.0/WoWBox-v0.3.0-runtime-assets.tar.gz",
-    "sha256": "43c6c9f17b368ef534f3bf1917e9a4c1a41c6113de0d3952172e3dbff88377f6"
+    "sha256": "e4cbaf75a70397a3d5b9692785d20e33de92c71d2c5f491b6a53352636896a5b"
   },
   "files": [
     {
       "path": "app/src/main/assets/box_spec.json",
-      "sha256": "ab6fdb4016592856f4d9d8343deccc73fded23df036e9cf63b18bf5df1093c1f",
-      "sizeBytes": 10279,
+      "sha256": "b79153af11d61b258793c6beac0dc5981a1f402cb604c9ce42e3935bfa73f66e",
+      "sizeBytes": 10271,
       "mode": 420
     },
     {
@@ -333,8 +333,8 @@
     },
     {
       "path": "app/src/main/assets/managed_assets.json",
-      "sha256": "9e08e2851d334afb4d92a7f603d59d91c5700e397607c211de76f9f9d00a27a7",
-      "sizeBytes": 10246,
+      "sha256": "54a8d05ef6a0e09b44b11e97df7e9ceb093f851c1ced5c818d963f928583a452",
+      "sizeBytes": 10286,
       "mode": 420
     },
     {
@@ -386,9 +386,9 @@
       "mode": 420
     },
     {
-      "path": "app/src/main/assets/wine-runtime-wowbox-mainline-openfonts-56f206c4.txz",
-      "sha256": "56f206c4eb1da0d297ab6e73041e000793b05d285b7edf96e9e84914babe9de1",
-      "sizeBytes": 143881812,
+      "path": "app/src/main/assets/wine-runtime-wowbox-rwoa-openfonts-6d87ba31.txz",
+      "sha256": "6d87ba31266c616c3b3f3e0c5028d6c20f3e2e8a5b5d560065d46d92c645b344",
+      "sizeBytes": 143882096,
       "mode": 420
     },
     {
@@ -401,6 +401,12 @@
       "path": "app/src/main/assets/wine_prefix_delta/wowbox-v010-to-mainline.json",
       "sha256": "01dbef7048c506116d4b4232063706f99dc139f99b3c6b967e92baa11c443fa6",
       "sizeBytes": 654368,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/wine_prefix_delta/wowbox-v010-to-rwoa.json",
+      "sha256": "b785363382bba37c827a6bad1300b567161317db2b5a11635cea735ec2ece8d7",
+      "sizeBytes": 654728,
       "mode": 420
     },
     {

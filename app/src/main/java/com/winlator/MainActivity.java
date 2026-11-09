@@ -73,7 +73,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
                 if (result != null) {
                     new androidx.appcompat.app.AlertDialog.Builder(this)
                             .setTitle(R.string.box_install_failed)
-                            .setMessage(R.string.box_update_recovery_failed)
+                            .setMessage(R.string.box_startup_recovery_failed)
                             .setCancelable(false)
                             .setPositiveButton(android.R.string.ok, (dialog, which) -> finish())
                             .show();

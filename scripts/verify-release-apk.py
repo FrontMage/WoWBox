@@ -186,7 +186,7 @@ def main():
     parser.add_argument("--sdk-dir")
     parser.add_argument("--build-tools", default="35.0.0")
     parser.add_argument("--release", default="v0.3.0")
-    parser.add_argument("--version-code", type=int, default=19)
+    parser.add_argument("--version-code", type=int, default=20)
     parser.add_argument("--version-name", default="0.3.0")
     args = parser.parse_args()
     try:

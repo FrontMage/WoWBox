@@ -1,18 +1,18 @@
 # Facts
 
-- The 0.3.0 standard application uses `com.winlator.llm`, version code 19,
+- The 0.3.0 standard application uses `com.winlator.llm`, version code 20,
   and version name `0.3.0`. The device-specific policy recognizes the
   validated RedMagic NX809J / SM8850 combination and fails closed when
   the SoC identity is unavailable.
   Source: code-evidence (app/build.gradle:319-335).
   Source: code-evidence (app/src/main/java/com/winlator/box/RedMagicDevicePolicy.java:9-20).
 
-- An isolated RedMagic NX809J 0.2 test installation was upgraded to a
-  standard 0.3.0 candidate without changing its checked spec, state, user
-  environment override or private test file. Nine layers matched; a neutral
-  GUI-path D3D9 probe mapped V39 and rendered for 20 seconds. This was a
-  single-device diagnostic, not general game or stability acceptance.
-  Source: config-evidence (docs/VALIDATION_0.3.0.md:1-7).
+- On a RedMagic NX809J, an isolated standard-package v0.3.0 versionCode 19
+  fixture upgraded to replacement candidate versionCode 20 while preserving
+  explicit environment overrides, a private canary and an unfinished prior
+  session record. Nine layers matched, overlay was inactive, and six runtime
+  and prefix ntdll hashes matched the patched Wine release.
+  Source: config-evidence (docs/VALIDATION_0.3.0.md:3-4).
 
 - In a RedMagic NX809J diagnostic, the user confirmed that a previously
   affected WoW Forever D3D12 scene no longer showed black blocks with V39,

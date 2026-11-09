@@ -87,6 +87,10 @@ public abstract class WineUtils {
     }
 
     public static void findWineVersionAsync(Context context, File wineDir, Callback<WineInfo> callback) {
+        if (com.winlator.box.BoxLaunchLease.enabled()) {
+            try { com.winlator.box.BoxLaunchLease.process().markWineUsed(); }
+            catch (IllegalStateException busy) { callback.call(null); return; }
+        }
         if (wineDir == null || !wineDir.isDirectory()) {
             callback.call(null);
             return;
@@ -328,6 +332,10 @@ public abstract class WineUtils {
     }
 
     public static void updateWineprefix(Context context, final Callback<Integer> terminationCallback) {
+        if (com.winlator.box.BoxLaunchLease.enabled()) {
+            try { com.winlator.box.BoxLaunchLease.process().markWineUsed(); }
+            catch (IllegalStateException busy) { if (terminationCallback != null) terminationCallback.call(-1); return; }
+        }
         ImageFs imageFs = ImageFs.find(context);
         final File rootDir = imageFs.getRootDir();
         File tmpDir = imageFs.getTmpDir();

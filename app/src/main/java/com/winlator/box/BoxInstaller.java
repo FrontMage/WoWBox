@@ -44,6 +44,10 @@ public class BoxInstaller {
             "asset://wine_prefix_delta/wowbox-v010-to-mainline.json";
     private static final String PUBLIC_WINEBOOT_OPTIONAL_MANIFEST_SHA256 =
             "01dbef7048c506116d4b4232063706f99dc139f99b3c6b967e92baa11c443fa6";
+    private static final String RWOA_WINEBOOT_OPTIONAL_MANIFEST =
+            "asset://wine_prefix_delta/wowbox-v010-to-rwoa.json";
+    private static final String RWOA_WINEBOOT_OPTIONAL_MANIFEST_SHA256 =
+            "b785363382bba37c827a6bad1300b567161317db2b5a11635cea735ec2ece8d7";
     private static final String RELEASE_STAGE_PREFIX = ".release-upgrade-stage-";
     private static final String RELEASE_STAGE_OWNER = "wowbox-v020-public-release-stage-v1\n";
     private final Context context;
@@ -70,10 +74,12 @@ public class BoxInstaller {
     /** Perform only the verified public v0.1 -> bundled v0.2 transition. */
     public void upgradeBundledRelease(BoxInstallListener listener) {
         synchronized (BoxInstaller.class) {
+          try (BoxLaunchLease.Lease ignored = BoxLaunchLease.process().beginMaintenance()) {
             File stage = null;
             try {
                 runtime.recoverPendingReleaseBeforeLaunch();
                 requireIdleWineUpdate();
+                com.winlator.core.StrictWineIdleScanner.requireIdle();
                 if (!runtime.isInstalled() || runtime.isPrefixProtected()) {
                     throw new IllegalStateException("release_upgrade_requires_unprotected_installed_prefix");
                 }
@@ -112,11 +118,13 @@ public class BoxInstaller {
                     }
                     return;
                 }
+                if (isRwoaTransition(active, candidate)) {
+                    upgradeRwoaRelease(listener, originalSpec, originalState, active, candidate);
+                    return;
+                }
                 validatePublicReleaseBaseline(active, candidate);
                 validateSpec(candidate);
-                if (!BoxDebugServer.get(context).verifyLayers().optBoolean("ok", false)) {
-                    throw new IllegalStateException("release_upgrade_existing_layers_unverified");
-                }
+                requireRwoaVerifiedBaseline(BoxDebugServer.get(context).verifyLayers());
                 BoxSpec.Layer oldWine = findLayer(active, "wine-runtime");
                 BoxSpec.Layer newWine = findLayer(candidate, "wine-runtime");
                 BoxSpec.Layer newPrefix = findLayer(candidate, "prefix-template");
@@ -259,7 +267,9 @@ public class BoxInstaller {
                 changes.add(new BoxReleaseTransaction.Entry(relativeReleaseTarget(appRoot, stateFile), candidateState,
                         originalStateHash, WinePrefixDeltaReconciler.sha256(candidateState), false));
                 publish(listener, "release-activate", 50, 0, "Updating verified runtime and prefix");
+                ReleaseRuntimeLock.run(runtime, () -> BoxDebugServer.get(context), () -> {
                 requireIdleWineUpdate();
+                com.winlator.core.StrictWineIdleScanner.requireIdle();
                 if (runtime.getRuntimeOverlay().length() != 0 ||
                         !originalSpecHash.equals(WinePrefixDeltaReconciler.sha256(specFile)) ||
                         !originalStateHash.equals(WinePrefixDeltaReconciler.sha256(stateFile)) ||
@@ -273,12 +283,11 @@ public class BoxInstaller {
                     if (winebootTimestamp != null)
                         WinebootTimestamp.requireActivatedInfHasNonzeroTimestamp(wineDir);
                     runtime.setCachedSpecForReleaseValidation(candidate);
-                    if (!BoxDebugServer.get(context).verifyLayers().optBoolean("ok", false)) {
-                        throw new IllegalStateException("release_upgrade_post_verify_failed");
-                    }
+                    requireRwoaVerifiedBaseline(BoxDebugServer.get(context).verifyLayers());
                 }, BoxInstaller::sameReleaseFilesystem);
                 runtime.invalidateCachedSpec();
                 finishPendingReleaseValidation();
+                });
                 publish(listener, "release-complete", 100, 100, "Runtime update complete");
             } catch (BoxReleaseTransaction.CommittedCleanupException committed) {
                 runtime.invalidateCachedSpec();
@@ -293,7 +302,217 @@ public class BoxInstaller {
                     Log.w(TAG, "Unable to clean temporary release stage " + stage);
                 }
             }
+          }
         }
+    }
+
+    private static final String RWOA_OLD_SHA = "56f206c4eb1da0d297ab6e73041e000793b05d285b7edf96e9e84914babe9de1";
+    private static final String RWOA_NEW_SHA = "6d87ba31266c616c3b3f3e0c5028d6c20f3e2e8a5b5d560065d46d92c645b344";
+    private static final String RWOA_RUNTIME_ID = "proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff";
+    private static final String[] RWOA_RUNTIME_PATHS = {
+            "lib/wine/i386-windows/ntdll.dll", "lib/wine/x86_64-windows/ntdll.dll",
+            "lib/wine/aarch64-windows/ntdll.dll"};
+    private static final String[] RWOA_BEFORE = {
+            "ee8fc3a3970b33cf4b81fc3078bbc5b0fa5d0bbb7a2f290945f4f98e5fe5a4ff",
+            "ac5112c7c3c6d25ca64d49390e54931d34d30d96ad77209794b5190352fdb314",
+            "249dff3e194cf0b52690804bc3e850985105a0a8ac1f43abaa1d395425ac4b8c"};
+    private static final String[] RWOA_AFTER = {
+            "e292ad25366bf8603b8d9d9d39f9a0f2e1ff495bf0f9b81194a4533e697f9ada",
+            "188b5d7a94a3b5d03bc0c39656e5b6b5a953855be7db39b772986284f357a8b2",
+            "42cdddab38c7802045af56d5d1cae5f50aaeffcd549fb8c7a50dbef45e6cf391"};
+
+    private static boolean isRwoaTransition(BoxSpec active, BoxSpec candidate) {
+        BoxSpec.Layer oldWine = findLayer(active, "wine-runtime");
+        BoxSpec.Layer newWine = findLayer(candidate, "wine-runtime");
+        return oldWine != null && newWine != null && RWOA_OLD_SHA.equals(oldWine.checksum) &&
+                RWOA_NEW_SHA.equals(newWine.checksum);
+    }
+
+    /** Only the independently audited three PE files change; preserve all other Wine and user data. */
+    private void upgradeRwoaRelease(BoxInstallListener listener, String originalSpec,
+            String originalState, BoxSpec active, BoxSpec candidate) throws Exception {
+        BoxSpec.Layer oldWine = findLayer(active, "wine-runtime");
+        BoxSpec.Layer newWine = findLayer(candidate, "wine-runtime");
+        BoxSpec.Layer oldPrefix = findLayer(active, "prefix-template");
+        BoxSpec.Layer newPrefix = findLayer(candidate, "prefix-template");
+        if (!LegacyRedMagicGpuDecision.WINE_SOURCE.equals(oldWine.source) ||
+                !LegacyRedMagicGpuDecision.RWOA_WINE_SOURCE.equals(newWine.source) ||
+                !RWOA_RUNTIME_ID.equals(oldWine.runtimeIdentifier) ||
+                !RWOA_RUNTIME_ID.equals(newWine.runtimeIdentifier) ||
+                !isInPlaceWineCandidateLayer(oldWine, newWine) ||
+                oldPrefix == null || newPrefix == null ||
+                !PUBLIC_WINEBOOT_OPTIONAL_MANIFEST.equals(oldPrefix.winePrefixDeltaManifest) ||
+                !PUBLIC_WINEBOOT_OPTIONAL_MANIFEST_SHA256.equalsIgnoreCase(oldPrefix.winePrefixDeltaChecksum) ||
+                !RWOA_WINEBOOT_OPTIONAL_MANIFEST.equals(newPrefix.winePrefixDeltaManifest) ||
+                !RWOA_WINEBOOT_OPTIONAL_MANIFEST_SHA256.equalsIgnoreCase(newPrefix.winePrefixDeltaChecksum) ||
+                !sameLayerExceptWinePrefixDelta(oldPrefix, newPrefix) ||
+                !sameLayerExactly(findLayer(active, "cpu-emu-stack"), findLayer(candidate, "cpu-emu-stack")) ||
+                !sameLayerExactly(findLayer(active, "input-bridge-stack"), findLayer(candidate, "input-bridge-stack"))) {
+            throw new IllegalStateException("rwoa_upgrade_unsupported_baseline");
+        }
+        validateSpec(candidate);
+        requireRwoaVerifiedBaseline(BoxDebugServer.get(context).verifyLayers());
+        File appRoot = context.getFilesDir().getCanonicalFile();
+        File boxDir = new File(appRoot, "box");
+        File specFile = new File(boxDir, "box-spec.json");
+        File stateFile = new File(boxDir, "box-state.json");
+        String specSha = releaseStringSha256(originalSpec), stateSha = releaseStringSha256(originalState);
+        File imageRoot = new File(appRoot, "imagefs");
+        File wineDir = new File(imageRoot, "opt/" + RWOA_RUNTIME_ID);
+        File prefix = new File(imageRoot, "home/xuser-box/.wine/drive_c/windows");
+        if (!imageRoot.isDirectory() || FileUtils.isSymlink(imageRoot) ||
+                !wineDir.isDirectory() || FileUtils.isSymlink(wineDir) ||
+                !prefix.isDirectory() || FileUtils.isSymlink(prefix)) {
+            throw new IllegalStateException("rwoa_upgrade_unsafe_root");
+        }
+        if (appRoot.getUsableSpace() < 3L * 1024 * 1024 * 1024)
+            throw new IllegalStateException("release_upgrade_insufficient_free_space");
+        File stage = java.nio.file.Files.createTempDirectory(boxDir.toPath(), RELEASE_STAGE_PREFIX).toFile();
+        try {
+            writeReleaseStageFile(new File(stage, ".owner"), RELEASE_STAGE_OWNER.getBytes(StandardCharsets.US_ASCII));
+            File wineCandidate = new File(stage, "wine");
+            if (!wineCandidate.mkdir()) throw new IOException("Cannot create Wine stage");
+            verifyAssetChecksum(stripAssetPrefix(newWine.source), newWine.checksum);
+            publish(listener, "release-prepare", 5, 0, "Verifying patched Wine");
+            if (!TarCompressorUtils.extract(TarCompressorUtils.Type.XZ, context,
+                    stripAssetPrefix(newWine.source), wineCandidate)) throw new IOException("Cannot extract patched Wine");
+            prepareWineRuntimeLayout(wineCandidate);
+            verifyPreparedWineRuntime(wineCandidate);
+            ArrayList<BoxReleaseTransaction.Entry> changes = new ArrayList<>();
+            java.util.HashMap<String, File> finalFiles = new java.util.HashMap<>();
+            java.util.HashMap<String, String> optional = new java.util.HashMap<>();
+            for (int i = 0; i < RWOA_RUNTIME_PATHS.length; i++) {
+                File before = new File(wineDir, RWOA_RUNTIME_PATHS[i]);
+                File after = new File(wineCandidate, RWOA_RUNTIME_PATHS[i]);
+                requireReleaseInputFile(before, RWOA_BEFORE[i]);
+                requireReleaseInputFile(after, RWOA_AFTER[i]);
+                changes.add(new BoxReleaseTransaction.Entry(relativeReleaseTarget(appRoot, before), after,
+                        RWOA_BEFORE[i], RWOA_AFTER[i], false));
+                finalFiles.put("/opt/" + RWOA_RUNTIME_ID + "/" + RWOA_RUNTIME_PATHS[i], after);
+            }
+            for (WinePrefixDeltaReconciler.Entry entry : loadWinePrefixDeltaEntries(newPrefix, RWOA_RUNTIME_ID)) {
+                if (entry.winebootMayRemove) optional.put(
+                        "/home/xuser-box/.wine/drive_c/windows/" + entry.prefixPath, entry.candidateSha256);
+            }
+            String[] prefixPaths = {"syswow64/ntdll.dll", "system32/ntdll.dll", "sysarm32/ntdll.dll"};
+            int[] sourceIndex = {0, 2, 2};
+            for (int i = 0; i < prefixPaths.length; i++) {
+                int n = sourceIndex[i];
+                File before = new File(prefix, prefixPaths[i]);
+                File after = new File(wineCandidate, RWOA_RUNTIME_PATHS[n]);
+                requireReleaseInputFile(before, RWOA_BEFORE[n]);
+                changes.add(new BoxReleaseTransaction.Entry(relativeReleaseTarget(appRoot, before), after,
+                        RWOA_BEFORE[n], RWOA_AFTER[n], false));
+                finalFiles.put("/home/xuser-box/.wine/drive_c/windows/" + prefixPaths[i], after);
+            }
+            File marker = wineRuntimeMarker(wineDir);
+            if (FileUtils.isSymlink(marker) || (marker.exists() && !wineRuntimeMarkerMatches(wineDir, oldWine.checksum)))
+                throw new IllegalStateException("rwoa_upgrade_wine_marker_mismatch");
+            String markerSha = marker.exists() ? WinePrefixDeltaReconciler.sha256(marker) : null;
+            File newMarker = new File(stage, "wine-marker");
+            writeReleaseStageFile(newMarker, (newWine.checksum + "\n").getBytes(StandardCharsets.US_ASCII));
+            changes.add(new BoxReleaseTransaction.Entry(relativeReleaseTarget(appRoot, marker), newMarker,
+                    markerSha, WinePrefixDeltaReconciler.sha256(newMarker), false));
+            JSONObject state = new JSONObject(originalState);
+            state.put("releaseUpgradeVerificationPending", true);
+            replaceRwoaLayerRecord(state, newWine, releaseCriticalFiles(newWine, imageRoot, wineDir, finalFiles, optional));
+            replaceRwoaLayerRecord(state, newPrefix, releaseCriticalFiles(newPrefix, imageRoot, wineDir, finalFiles, optional));
+            File candidateSpec = new File(stage, "box-spec.json");
+            File candidateState = new File(stage, "box-state.json");
+            writeReleaseStageFile(candidateSpec, releaseSpecPreservingUserFields(originalSpec, candidate).getBytes(StandardCharsets.UTF_8));
+            writeReleaseStageFile(candidateState, state.toString().getBytes(StandardCharsets.UTF_8));
+            changes.add(new BoxReleaseTransaction.Entry(relativeReleaseTarget(appRoot, specFile), candidateSpec,
+                    specSha, WinePrefixDeltaReconciler.sha256(candidateSpec), false));
+            changes.add(new BoxReleaseTransaction.Entry(relativeReleaseTarget(appRoot, stateFile), candidateState,
+                    stateSha, WinePrefixDeltaReconciler.sha256(candidateState), false));
+            // Initialize the singleton before taking runtime's monitor: its
+            // constructor itself obtains that monitor.
+            publish(listener, "release-activate", 50, 0, "Activating patched Wine");
+            ReleaseRuntimeLock.run(runtime, () -> BoxDebugServer.get(context), () -> {
+                requireIdleWineUpdate();
+                com.winlator.core.StrictWineIdleScanner.requireIdle();
+                if (runtime.getRuntimeOverlay().length() != 0 ||
+                        !specSha.equals(WinePrefixDeltaReconciler.sha256(specFile)) ||
+                        !stateSha.equals(WinePrefixDeltaReconciler.sha256(stateFile))) {
+                    throw new IllegalStateException("rwoa_upgrade_source_changed");
+                }
+                BoxReleaseTransaction.apply(appRoot, new File(boxDir, "release-upgrade-transaction"), changes, () -> {
+                    runtime.setCachedSpecForReleaseValidation(candidate);
+                    requireRwoaVerifiedBaseline(BoxDebugServer.get(context).verifyLayers());
+                }, BoxInstaller::sameReleaseFilesystem);
+                runtime.invalidateCachedSpec();
+                finishPendingReleaseValidation();
+            });
+            publish(listener, "release-complete", 100, 100, "Patched Wine update complete");
+        } finally {
+            runtime.invalidateCachedSpec();
+            if (stage.exists() && !FileUtils.delete(stage)) Log.w(TAG, "Unable to clean " + stage);
+        }
+    }
+
+    static void requireRwoaVerifiedBaseline(JSONObject verification) {
+        if (verification == null || !verification.optBoolean("ok", false))
+            throw new IllegalStateException("rwoa_upgrade_existing_layers_unverified");
+        JSONArray layers = verification.optJSONArray("layers");
+        if (layers == null) throw new IllegalStateException("rwoa_upgrade_missing_layers");
+        java.util.Set<String> required = new java.util.HashSet<>(java.util.Arrays.asList(
+                "base-imagefs", "graphics-wrapper-stack", "frame-generation-stack", "prefix-template",
+                "wine-runtime", "input-bridge-stack", "dx-wrapper-stack", "gpu-driver-stack", "cpu-emu-stack"));
+        java.util.HashSet<String> allSeen = new java.util.HashSet<>();
+        java.util.HashSet<String> seen = new java.util.HashSet<>();
+        for (int i = 0; i < layers.length(); i++) {
+            JSONObject row = layers.optJSONObject(i);
+            if (row == null) throw new IllegalStateException("rwoa_upgrade_bad_layer");
+            String type = row.optString("type", "");
+            if (!required.contains(type) || !allSeen.add(type))
+                throw new IllegalStateException("rwoa_upgrade_invalid_layer_set");
+            if (!"wine-runtime".equals(type) && !"prefix-template".equals(type)) continue;
+            if (!seen.add(type) || !row.optBoolean("identityMatches", false) ||
+                    !row.optBoolean("criticalBaselineAvailable", false) ||
+                    !row.optBoolean("criticalFilesPresent", false) ||
+                    !row.optBoolean("criticalFilesMatch", false) ||
+                    !row.optBoolean("winePrefixDeltaMatches", false) ||
+                    !sameCriticalPathSet(row.optJSONArray("baselineCriticalFiles"), row.optJSONArray("criticalFiles")))
+                throw new IllegalStateException("rwoa_upgrade_incomplete_critical_baseline: " + type);
+        }
+        if (!allSeen.equals(required) || seen.size() != 2)
+            throw new IllegalStateException("rwoa_upgrade_missing_critical_baseline");
+    }
+
+    private static boolean sameCriticalPathSet(JSONArray before, JSONArray current) {
+        if (before == null || current == null || before.length() == 0 || before.length() != current.length()) return false;
+        java.util.HashSet<String> paths = new java.util.HashSet<>();
+        for (int i = 0; i < before.length(); i++) {
+            JSONObject row = before.optJSONObject(i);
+            String path = row != null ? row.optString("path", "") : "";
+            if (path.isEmpty() || !paths.add(path)) return false;
+        }
+        for (int i = 0; i < current.length(); i++) {
+            JSONObject row = current.optJSONObject(i);
+            String path = row != null ? row.optString("path", "") : "";
+            if (!paths.remove(path)) return false;
+        }
+        return paths.isEmpty();
+    }
+
+    static void replaceRwoaLayerRecord(JSONObject state, BoxSpec.Layer layer, JSONArray critical)
+            throws JSONException {
+        JSONArray rows = state.getJSONArray("installedLayers");
+        JSONObject match = null;
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.getJSONObject(i);
+            if (layer.type.equals(row.optString("type"))) {
+                if (match != null) throw new IllegalStateException("duplicate_rwoa_layer_record");
+                match = row;
+            }
+        }
+        if (match == null) throw new IllegalStateException("missing_rwoa_layer_record");
+        match.put("source", layer.source);
+        match.put("checksum", layer.checksum);
+        match.put("winePrefixDeltaManifest", layer.winePrefixDeltaManifest);
+        match.put("winePrefixDeltaChecksum", layer.winePrefixDeltaChecksum);
+        match.put("criticalFiles", critical);
+        match.put("installedAt", System.currentTimeMillis());
     }
 
     private void validatePublicReleaseBaseline(BoxSpec active, BoxSpec candidate) {
@@ -319,7 +538,8 @@ public class BoxInstaller {
                 !"149a9ca40b1119d01de5599faead07a9748cba511b0039fafaa48b4e0e10078c".equalsIgnoreCase(newInput.checksum) ||
                 !oldWine.target.equals(newWine.target) ||
                 !runtimeId.equals(newWine.runtimeIdentifier) || !runtimeId.equals(newPrefix.runtimeIdentifier) ||
-                !"56f206c4eb1da0d297ab6e73041e000793b05d285b7edf96e9e84914babe9de1".equalsIgnoreCase(newWine.checksum) ||
+                !RWOA_NEW_SHA.equalsIgnoreCase(newWine.checksum) ||
+                !LegacyRedMagicGpuDecision.RWOA_WINE_SOURCE.equals(newWine.source) ||
                 !"2beba31f8d0f32c192433f1cd0f8d73e53799e330203d0c7d0d11a883e98ed9d".equalsIgnoreCase(newFex.checksum) ||
                 !sameLayerExceptWinePrefixDelta(oldPrefix, newPrefix) ||
                 !isInPlaceWineCandidateLayer(oldWine, newWine)) {
@@ -630,25 +850,33 @@ public class BoxInstaller {
     /** Finish a post-commit preflight after process interruption or normal activation. */
     public void finishPendingReleaseValidation() {
         synchronized (BoxInstaller.class) {
-            JSONObject state = runtime.getState();
-            if (!state.optBoolean("releaseUpgradeVerificationPending", false)) return;
             try {
-                requireIdleWineUpdate();
-                if (needsBundledReleaseUpgrade() || !BoxDebugServer.get(context).verifyLayers().optBoolean("ok", false)) {
-                    throw new IllegalStateException("release_upgrade_post_verify_failed");
-                }
-                state.remove("releaseUpgradeVerificationPending");
+                ReleaseRuntimeLock.run(runtime, () -> BoxDebugServer.get(context), () -> {
                 File appRoot = context.getFilesDir().getCanonicalFile();
                 File stateFile = new File(appRoot, "box/box-state.json");
+                if (FileUtils.isSymlink(stateFile)) throw new IllegalStateException("unsafe_release_state");
+                if (!stateFile.isFile()) return;
+                String stateSnapshot = AtomicFileSupport.readUtf8(stateFile);
+                String expectedStateSha = releaseStringSha256(stateSnapshot);
+                JSONObject state = new JSONObject(stateSnapshot);
+                if (!state.optBoolean("releaseUpgradeVerificationPending", false)) return;
+                requireIdleWineUpdate();
+                com.winlator.core.StrictWineIdleScanner.requireIdle();
+                if (needsBundledReleaseUpgrade()) {
+                    throw new IllegalStateException("release_upgrade_post_verify_failed");
+                }
+                requireRwoaVerifiedBaseline(BoxDebugServer.get(context).verifyLayers());
+                state.remove("releaseUpgradeVerificationPending");
                 File stage = java.nio.file.Files.createTempFile(new File(appRoot, "box").toPath(), ".release-state-", ".tmp").toFile();
                 try {
                     writeReleaseStageFile(stage, state.toString().getBytes(StandardCharsets.UTF_8));
                     ArrayList<BoxReleaseTransaction.Entry> one = new ArrayList<>();
                     one.add(new BoxReleaseTransaction.Entry(relativeReleaseTarget(appRoot, stateFile), stage,
-                            WinePrefixDeltaReconciler.sha256(stateFile), WinePrefixDeltaReconciler.sha256(stage), false));
+                            expectedStateSha, WinePrefixDeltaReconciler.sha256(stage), false));
                     BoxReleaseTransaction.apply(appRoot, new File(appRoot, "box/release-upgrade-transaction"),
                             one, BoxInstaller::sameReleaseFilesystem);
                 } finally { if (stage.exists()) stage.delete(); }
+                });
             } catch (Exception e) {
                 throw new IllegalStateException("release_upgrade_validation_pending", e);
             }
@@ -1775,9 +2003,11 @@ public class BoxInstaller {
     }
 
     static boolean isTrustedWinebootOptionalManifest(String path, String checksum, String runtimeId) {
-        return PUBLIC_WINEBOOT_OPTIONAL_MANIFEST.equals(path) &&
-                PUBLIC_WINEBOOT_OPTIONAL_MANIFEST_SHA256.equalsIgnoreCase(checksum) &&
-                "proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff".equals(runtimeId);
+        return "proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff".equals(runtimeId) &&
+                ((PUBLIC_WINEBOOT_OPTIONAL_MANIFEST.equals(path) &&
+                  PUBLIC_WINEBOOT_OPTIONAL_MANIFEST_SHA256.equalsIgnoreCase(checksum)) ||
+                 (RWOA_WINEBOOT_OPTIONAL_MANIFEST.equals(path) &&
+                  RWOA_WINEBOOT_OPTIONAL_MANIFEST_SHA256.equalsIgnoreCase(checksum)));
     }
 
     private int copyWineBuiltinsIfMissing(File wineDir, boolean isArm64EC, String srcName, File dstDir,

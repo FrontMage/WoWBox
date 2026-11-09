@@ -142,7 +142,19 @@ public class ContainersFragment extends Fragment {
                         if (!XrActivity.isSupported()) {
                             Intent intent = new Intent(context, XServerDisplayActivity.class);
                             intent.putExtra("container_id", container.id);
-                            context.startActivity(intent);
+                            String capability;
+                            try { capability = com.winlator.box.BoxLaunchLease.enabled() ?
+                                    com.winlator.box.BoxLaunchLease.process().reserve() : null; }
+                            catch (IllegalStateException busy) {
+                                android.widget.Toast.makeText(context, R.string.box_update_running, android.widget.Toast.LENGTH_LONG).show();
+                                break;
+                            }
+                            if (capability != null) intent.putExtra("box_launch_capability", capability);
+                            try { context.startActivity(intent); }
+                            catch (RuntimeException failure) {
+                                com.winlator.box.BoxLaunchLease.process().cancel(capability);
+                                throw failure;
+                            }
                         }
                         else XrActivity.openIntent(getActivity(), container.id, null);
                         break;

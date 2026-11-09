@@ -1528,9 +1528,15 @@ public class BoxRuntime {
     }
 
     private void startSessionActivity(Intent intent, String sessionId) {
+        String capability = null;
         try {
+            if (BoxLaunchLease.enabled()) {
+                capability = BoxLaunchLease.process().reserve();
+                intent.putExtra("box_launch_capability", capability);
+            }
             context.startActivity(intent);
         } catch (RuntimeException failure) {
+            BoxLaunchLease.process().cancel(capability);
             // Only close this request's metadata; never stop an existing guest.
             getSessionManager().markFinishedIfRunning(sessionId, -1);
             throw failure;
@@ -1540,12 +1546,20 @@ public class BoxRuntime {
     /** Recover an interrupted release before using any installed runtime. */
     public void recoverPendingReleaseBeforeLaunch() {
         synchronized (BoxInstaller.class) {
-            File journal = new File(BoxPaths.getBoxDir(context), "release-upgrade-transaction");
+          File journal = new File(BoxPaths.getBoxDir(context), "release-upgrade-transaction");
+          if (!journal.exists() && !FileUtils.isSymlink(journal) &&
+                  !getState().optBoolean("releaseUpgradeVerificationPending", false)) {
+              try { new BoxInstaller(context).cleanupAbandonedReleaseStages(); }
+              catch (java.io.IOException error) { throw new IllegalStateException("release_stage_cleanup_failed", error); }
+              return;
+          }
+          try (BoxLaunchLease.Lease ignored = BoxLaunchLease.process().beginMaintenance()) {
             if (journal.exists() || FileUtils.isSymlink(journal)) {
                 if (XServerDisplayActivity.hasActiveSession() ||
                         com.winlator.core.WineSessionProcessController.getInstance().hasActiveWineProcesses()) {
                     throw new IllegalStateException("release_recovery_requires_idle");
                 }
+                com.winlator.core.StrictWineIdleScanner.requireIdle();
                 try {
                     BoxReleaseTransaction.recover(context.getFilesDir().getCanonicalFile(),
                             new File(context.getFilesDir().getCanonicalFile(), "box/release-upgrade-transaction"));
@@ -1560,6 +1574,7 @@ public class BoxRuntime {
                 throw new IllegalStateException("release_stage_cleanup_failed", e);
             }
             new BoxInstaller(context).finishPendingReleaseValidation();
+          }
         }
     }
 

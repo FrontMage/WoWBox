@@ -50,15 +50,15 @@
       "checksum": "350c6f287ef2008e62439a00f67affc0ef650a7ec2c2b7e8d0bea89e47c2f05a",
       "target": "/home/xuser-box",
       "replacePolicy": "preserve",
-      "winePrefixDeltaManifest": "asset://wine_prefix_delta/wowbox-v010-to-mainline.json",
-      "winePrefixDeltaChecksum": "01dbef7048c506116d4b4232063706f99dc139f99b3c6b967e92baa11c443fa6"
+      "winePrefixDeltaManifest": "asset://wine_prefix_delta/wowbox-v010-to-rwoa.json",
+      "winePrefixDeltaChecksum": "b785363382bba37c827a6bad1300b567161317db2b5a11635cea735ec2ece8d7"
     },
     {
       "type": "wine-runtime",
-      "source": "asset://wine-runtime-wowbox-mainline-openfonts-56f206c4.txz",
+      "source": "asset://wine-runtime-wowbox-rwoa-openfonts-6d87ba31.txz",
       "runtimeIdentifier": "proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff",
       "archive": "txz",
-      "checksum": "56f206c4eb1da0d297ab6e73041e000793b05d285b7edf96e9e84914babe9de1",
+      "checksum": "6d87ba31266c616c3b3f3e0c5028d6c20f3e2e8a5b5d560065d46d92c645b344",
       "target": "/opt/proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff",
       "replacePolicy": "replace",
       "capabilities": [

@@ -1,5 +1,9 @@
 # Decisions
 
+- Replace the published v0.3.0 assets and tag in place with the requested Wine `RtlWaitOnAddress` backport, retain the previous artifacts as rollback evidence, and preserve user data across supported upgrades. Keep version name 0.3.0 and increment the Android version code to 20 so installations can distinguish the replacement.
+  Source: user-confirmed (2026-11-09: directly overwrite the release and include the requested repair).
+  Source: code-evidence (app/build.gradle:319-335).
+
 - Publish the requested 0.3.0 under the existing standard package identity,
   preserving existing application and game data. Limit device-specific V39,
   Vulkan host composition and the Battle.net CEF mitigation to the observed

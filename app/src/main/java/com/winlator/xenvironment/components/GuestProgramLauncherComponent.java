@@ -107,6 +107,8 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
 
     @Override
     public void start() {
+        if (com.winlator.box.BoxLaunchLease.enabled())
+            com.winlator.box.BoxLaunchLease.process().markWineUsed();
         synchronized (lock) {
             stop();
             extractFexcoreFiles();

@@ -60,5 +60,11 @@ public class BoxWinebootOptionalPolicyTest {
         assertFalse(BoxInstaller.isTrustedWinebootOptionalManifest(path, OTHER, runtime));
         assertFalse(BoxInstaller.isTrustedWinebootOptionalManifest("asset://other.json", hash, runtime));
         assertFalse(BoxInstaller.isTrustedWinebootOptionalManifest(path, hash, "different-runtime"));
+        String patchedPath = "asset://wine_prefix_delta/wowbox-v010-to-rwoa.json";
+        String patchedHash = "b785363382bba37c827a6bad1300b567161317db2b5a11635cea735ec2ece8d7";
+        assertTrue(BoxInstaller.isTrustedWinebootOptionalManifest(patchedPath, patchedHash, runtime));
+        assertFalse(BoxInstaller.isTrustedWinebootOptionalManifest(patchedPath, hash, runtime));
+        assertFalse(BoxInstaller.isTrustedWinebootOptionalManifest(path, patchedHash, runtime));
+        assertFalse(BoxInstaller.isTrustedWinebootOptionalManifest(patchedPath, patchedHash, "different-runtime"));
     }
 }

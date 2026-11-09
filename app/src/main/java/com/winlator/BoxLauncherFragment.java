@@ -47,6 +47,8 @@ public class BoxLauncherFragment extends Fragment {
     private boolean upgrading;
     private boolean recovering;
     private boolean recoveryFailed;
+    private boolean restartGuidanceShowing;
+    private String lastUpdateError;
     private boolean gpuFallback;
     private boolean gpuBlocked;
     private final BoxLaunchController launchController = new BoxLaunchController();
@@ -61,6 +63,7 @@ public class BoxLauncherFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
+        if (savedInstanceState != null) lastUpdateError = savedInstanceState.getString("runtimeUpdateError");
         runtime = BoxRuntime.get(requireContext());
         recyclerView = view.findViewById(R.id.RecyclerView);
         emptyView = view.findViewById(R.id.TVEmptyText);
@@ -84,6 +87,12 @@ public class BoxLauncherFragment extends Fragment {
         ((AppCompatActivity) requireActivity()).getSupportActionBar().setTitle(R.string.box_launcher_title);
         if (launchController.isPending()) showLaunchChecking();
         else refreshRuntimeState();
+    }
+
+    @Override
+    public void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putString("runtimeUpdateError", lastUpdateError);
     }
 
     @Override
@@ -139,13 +148,15 @@ public class BoxLauncherFragment extends Fragment {
                 if (result != null) {
                     recoveryFailed = true;
                     android.util.Log.e("WoWBox", "Runtime recovery failed: " + result);
-                    runtimeUpdateStatus.setText(R.string.box_update_recovery_failed);
+                    runtimeUpdateStatus.setText(recoveryErrorMessage(result));
                     runtimeUpdateButton.setVisibility(View.VISIBLE);
                     runtimeUpdateButton.setText(R.string.box_update_retry_recovery);
                     runtimeUpdateButton.setEnabled(true);
+                    if (result.contains("release_restart_required")) showRestartGuidance();
                     return;
                 }
                 recoveryFailed = false;
+                if (ReleaseUpgradeMessagePolicy.requiresRecovery(lastUpdateError)) lastUpdateError = null;
                 gpuFallback = gpuFallbackResult;
                 gpuBlocked = gpuBlockedResult;
                 runtimeUpdateButton.setText(R.string.box_update_action);
@@ -158,7 +169,8 @@ public class BoxLauncherFragment extends Fragment {
         boolean updateRequired = new BoxInstaller(requireContext()).needsBundledReleaseUpgrade();
         runtimeUpdateButton.setVisibility(updateRequired ? View.VISIBLE : View.GONE);
         runtimeUpdateStatus.setVisibility(updateRequired || gpuFallback || gpuBlocked ? View.VISIBLE : View.GONE);
-        if (updateRequired && !upgrading) runtimeUpdateStatus.setText(R.string.box_update_required);
+        if (updateRequired && !upgrading) runtimeUpdateStatus.setText(lastUpdateError != null
+                ? updateErrorMessage(lastUpdateError) : R.string.box_update_required);
         else if (com.winlator.box.GpuFallbackNoticePolicy.showBlocked(gpuBlocked, updateRequired, upgrading)) runtimeUpdateStatus.setText(R.string.box_gpu_verify_failed);
         else if (com.winlator.box.GpuFallbackNoticePolicy.showFallback(gpuFallback, updateRequired, upgrading)) runtimeUpdateStatus.setText(R.string.box_gpu_original_fallback);
         runtimeUpdateButton.setEnabled(!upgrading);
@@ -273,6 +285,7 @@ public class BoxLauncherFragment extends Fragment {
         final androidx.fragment.app.FragmentActivity activity = getActivity();
         if (activity == null) return;
         upgrading = true;
+        lastUpdateError = null;
         runtimeUpdateButton.setEnabled(false);
         desktopButton.setEnabled(false);
         runtimeUpdateStatus.setText(R.string.box_update_running);
@@ -289,26 +302,68 @@ public class BoxLauncherFragment extends Fragment {
             activity.runOnUiThread(() -> {
                 upgrading = false;
                 if (!isAdded() || getView() == null) return;
-                loadExecutables();
                 if (result == null) {
+                    lastUpdateError = null;
+                    loadExecutables();
                     Toast.makeText(activity, R.string.box_update_complete, Toast.LENGTH_LONG).show();
                 }
                 else {
+                    lastUpdateError = result;
                     android.util.Log.e("WoWBox", "Runtime update failed: " + result);
+                    if (ReleaseUpgradeMessagePolicy.requiresRecovery(result)) {
+                        recoveryFailed = true;
+                        runtimeUpdateButton.setVisibility(View.VISIBLE);
+                        runtimeUpdateButton.setText(R.string.box_update_retry_recovery);
+                        runtimeUpdateButton.setEnabled(true);
+                    } else {
+                        loadExecutables();
+                    }
                     runtimeUpdateStatus.setVisibility(View.VISIBLE);
                     runtimeUpdateStatus.setText(updateErrorMessage(result));
+                    if (result.contains("release_restart_required")) showRestartGuidance();
                 }
             });
         }, "wowbox-runtime-update").start();
     }
 
     private int updateErrorMessage(String error) {
-        String value = error.toLowerCase(java.util.Locale.US);
-        if (value.contains("insufficient") || value.contains("free space")) return R.string.box_update_not_enough_space;
-        if (value.contains("active_wine") || value.contains("requires_idle")) return R.string.box_update_close_game;
-        if (value.contains("unknown") || value.contains("unsupported") || value.contains("protected") ||
-                value.contains("overlay") || value.contains("unverified")) return R.string.box_update_existing_data_not_supported;
-        return R.string.box_update_failed;
+        switch (ReleaseUpgradeMessagePolicy.classify(error)) {
+            case SESSION_ACTIVE: return R.string.box_update_close_game;
+            case SESSION_UNKNOWN: return R.string.box_update_session_unknown;
+            case SPACE: return R.string.box_update_not_enough_space;
+            case PROTECTED: return R.string.box_update_protected;
+            case OVERLAY: return R.string.box_update_overlay;
+            case UNSUPPORTED: return R.string.box_update_existing_data_not_supported;
+            case RECOVERY_PENDING: return R.string.box_update_recovery_failed;
+            default: return R.string.box_update_failed;
+        }
+    }
+
+    private int recoveryErrorMessage(String error) {
+        ReleaseUpgradeMessagePolicy.Kind kind = ReleaseUpgradeMessagePolicy.classify(error);
+        if (kind == ReleaseUpgradeMessagePolicy.Kind.SESSION_ACTIVE ||
+                kind == ReleaseUpgradeMessagePolicy.Kind.SESSION_UNKNOWN ||
+                kind == ReleaseUpgradeMessagePolicy.Kind.SPACE) return updateErrorMessage(error);
+        return R.string.box_update_recovery_failed;
+    }
+
+    private void showRestartGuidance() {
+        if (!isAdded() || restartGuidanceShowing) return;
+        restartGuidanceShowing = true;
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle(R.string.box_restart_required_title)
+                .setMessage(R.string.box_restart_required_detail)
+                .setNegativeButton(R.string.box_restart_later, null)
+                .setPositiveButton(R.string.box_open_app_settings, (ignored, which) -> {
+                    Intent settings = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.fromParts("package", requireContext().getPackageName(), null));
+                    try { startActivity(settings); }
+                    catch (ActivityNotFoundException failure) {
+                        Toast.makeText(requireContext(), R.string.box_update_failed, Toast.LENGTH_LONG).show();
+                    }
+                }).create();
+        dialog.setOnDismissListener(ignored -> restartGuidanceShowing = false);
+        dialog.show();
     }
 
     private static class LaunchItem {

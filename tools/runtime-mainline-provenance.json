@@ -6,13 +6,16 @@
   },
   "wine": {
     "repository": "https://github.com/FrontMage/proton-wine",
-    "commit": "a545dee5aa1991ba77985a2cfe8d6a490152d166",
+    "commit": "0ba238876cb4aff00bb0a9a21ad97e8d9e6887ea",
     "buildArchiveSHA256": "d2e1ed2f22825904a0acc8dacd6e4d534482133cf16952d11928951fe23ce313",
-    "publicArchiveSHA256": "56f206c4eb1da0d297ab6e73041e000793b05d285b7edf96e9e84914babe9de1",
-    "publicationChange": "Only font substitutions and two non-overwriting CJK fallback aliases in share/wine/wine.inf differ; other archive members verified against the pinned build.",
+    "publicArchiveSHA256": "6d87ba31266c616c3b3f3e0c5028d6c20f3e2e8a5b5d560065d46d92c645b344",
+    "publicationChange": "Three Android ntdll PE files rebuilt from the patched commit replace their counterparts in the base public archive; all other members including public-font INF are unchanged.",
     "correspondingSourcePatch": "tools/wine-openfonts-mainline.patch",
     "sourcePatchSHA256": "1c1dc9cd006beadd7b40c7696f9c1f8e5ef3e1068d2ce3614881399e66d7e6d7",
-    "sourceLicense": "LGPL-2.1-or-later"
+    "sourceLicense": "LGPL-2.1-or-later",
+    "baseCommit": "a545dee5aa1991ba77985a2cfe8d6a490152d166",
+    "upstreamWaitAddressFix": "81e52628b25ac173d04796e8a9b9cda637d3e233",
+    "basePublicArchiveSHA256": "56f206c4eb1da0d297ab6e73041e000793b05d285b7edf96e9e84914babe9de1"
   },
   "fex": {
     "repository": "https://github.com/FrontMage/FEX",

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="box_update_required">启动前需要更新运行环境，现有游戏数据会保留。</string>
+    <string name="box_update_action">更新运行环境</string>
+    <string name="box_update_running">正在更新运行环境…</string>
+    <string name="box_update_checking">正在检查运行环境…</string>
+    <string name="box_update_recovery_failed">上次更新需要恢复或验证。请保持 WoW Box 打开，点击“重试恢复”；如果仍未解决，请保留文件并联系支持。</string>
+    <string name="box_update_retry_recovery">重试恢复</string>
+    <string name="box_update_complete">运行环境更新完成。</string>
+    <string name="box_update_failed">运行环境更新未能完成，请重试；如果仍未解决，请保留文件并联系支持。</string>
+    <string name="box_update_not_enough_space">存储空间不足，无法更新运行环境。请腾出空间后重试。</string>
+    <string name="box_update_close_game">请先关闭游戏和 WoW Box 会话，再重试。</string>
+    <string name="box_update_session_unknown">无法确认会话状态。请关闭并重新打开 WoW Box 后重试；如果仍未解决，请联系支持。</string>
+    <string name="box_update_protected">当前前缀处于保护状态，无法自动更新。请保留文件并联系支持。</string>
+    <string name="box_update_overlay">当前运行环境启用了覆盖层，无法自动更新。请保留文件并联系支持。</string>
+    <string name="box_update_existing_data_not_supported">无法确认现有运行环境或前缀是否可以自动更新。请保留文件并联系支持。</string>
+    <string name="box_restart_required_title">更新前请完全停止 WoW Box</string>
+    <string name="box_restart_required_detail">请先保存游戏进度并关闭游戏。然后打开手机“设置 → 应用 → WoW Box”，点击“强行停止”。重新打开 WoW Box 后，请先点击“更新运行环境”，再启动游戏。返回桌面或划掉应用界面可能不会停止后台进程。</string>
+    <string name="box_open_app_settings">打开应用设置</string>
+    <string name="box_restart_later">稍后再说</string>
+    <string name="box_launch_expired">本次启动请求已过期，请从 WoW Box 重新启动。</string>
+    <string name="box_startup_recovery_failed">WoW Box 无法完成运行环境的检查或恢复。请关闭应用后重新打开重试；如问题持续，请保留文件并联系支持。</string>
+</resources>

@@ -9,12 +9,14 @@ import tarfile
 
 ROOT = Path(__file__).resolve().parents[1]
 OLD_WINE = "app/src/main/assets/wine-runtime-wowbox-openfonts-9ac94fff.txz"
+PREVIOUS_WINE = "app/src/main/assets/wine-runtime-wowbox-mainline-openfonts-56f206c4.txz"
 OLD_FEX = "app/src/main/assets/fexcore/fexcore-2508-frontmage-bnet-99d69a-native-mock-jemalloc-5f1dbc8d.tzst"
 OLD_INPUT_BRIDGE = "app/src/main/assets/winhandler/winhandler-xinput-wow-filtered-arm64x-437d6859.tzst"
 NEW_FILES = (
-    "app/src/main/assets/wine-runtime-wowbox-mainline-openfonts-56f206c4.txz",
+    "app/src/main/assets/wine-runtime-wowbox-rwoa-openfonts-6d87ba31.txz",
     "app/src/main/assets/fexcore/fexcore-2508-wowbox-mainline-7519b960-2beba31f.tzst",
     "app/src/main/assets/wine_prefix_delta/wowbox-v010-to-mainline.json",
+    "app/src/main/assets/wine_prefix_delta/wowbox-v010-to-rwoa.json",
     "app/src/main/assets/wine_runtime_baseline/wowbox-v010-tree.json",
     "app/src/main/assets/winhandler/winhandler-xinput-wow-filtered-arm64x-149a9ca4.tzst",
     "app/src/main/assets/graphics_driver/adrenotools-stevenmxz-turnip-gen8-v39-ad2b2d54.tzst",
@@ -46,7 +48,7 @@ def main():
     manifest_path = ROOT / "runtime-assets.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     # Preserve release resources from v0.2 and add the pinned v0.3 candidate.
-    paths = {row["path"] for row in manifest["files"]} - {OLD_WINE, OLD_FEX, OLD_INPUT_BRIDGE}
+    paths = {row["path"] for row in manifest["files"]} - {OLD_WINE, PREVIOUS_WINE, OLD_FEX, OLD_INPUT_BRIDGE}
     paths.update(NEW_FILES)
     rows = []
     for name in sorted(paths):

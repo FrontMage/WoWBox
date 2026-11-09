@@ -193,6 +193,9 @@ import java.util.concurrent.Executors;
     private String boxLaunchTargetId;
     private int boxControlsProfileId;
     private String boxSessionId;
+    private boolean rejectedLaunchCapability;
+    private String savedRecreationCapability;
+    private static final String RECREATE_CAPABILITY = "box_recreation_capability";
     private BoxDebugConfig boxDebugConfig = BoxDebugConfig.none();
     private UuVpnGuard uuVpnGuard;
     private final BoxSessionResumeGate resumeGate = new BoxSessionResumeGate();
@@ -207,7 +210,20 @@ import java.util.concurrent.Executors;
         if (BoxSessionForegroundService.ACTION_RETURN_TO_SESSION.equals(getIntent().getAction())) {
             // A notification tap must only re-use an existing singleTask activity.
             // If Android no longer has that task, do not create an empty Box launch.
+            rejectedLaunchCapability = true;
             BoxSessionForegroundService.stop(this);
+            finish();
+            return;
+        }
+        String capability = savedInstanceState != null ? savedInstanceState.getString(RECREATE_CAPABILITY) :
+                getIntent().getStringExtra("box_launch_capability");
+        if (com.winlator.box.BoxLaunchLease.enabled() &&
+                !com.winlator.box.BoxLaunchLease.process().claim(capability, this)) {
+            rejectedLaunchCapability = true;
+            android.widget.Toast.makeText(this, R.string.box_launch_expired, android.widget.Toast.LENGTH_LONG).show();
+            Intent launcher = new Intent(this, MainActivity.class);
+            launcher.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(launcher);
             finish();
             return;
         }
@@ -269,6 +285,10 @@ import java.util.concurrent.Executors;
                         container.putExtra("wineprefixNeedsUpdate", null);
                         container.putExtra("wincomponents", null);
                         container.saveData();
+                        if (com.winlator.box.BoxLaunchLease.enabled()) {
+                            String replacementCapability = com.winlator.box.BoxLaunchLease.process().reserve();
+                            getIntent().putExtra("box_launch_capability", replacementCapability);
+                        }
                         AppUtils.restartActivity(this);
                     }
                     else finish();
@@ -409,6 +429,24 @@ import java.util.concurrent.Executors;
     }
 
     @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        if (com.winlator.box.BoxLaunchLease.enabled() && !rejectedLaunchCapability && !isFinishing()) {
+            cancelSavedRecreationCapability();
+            try {
+                savedRecreationCapability = com.winlator.box.BoxLaunchLease.process().reserve();
+                outState.putString(RECREATE_CAPABILITY, savedRecreationCapability);
+            }
+            catch (IllegalStateException ignored) { /* An update must never admit an old Activity. */ }
+        }
+        super.onSaveInstanceState(outState);
+    }
+
+    private void cancelSavedRecreationCapability() {
+        com.winlator.box.BoxLaunchLease.process().cancel(savedRecreationCapability);
+        savedRecreationCapability = null;
+    }
+
+    @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == MainActivity.EDIT_INPUT_CONTROLS_REQUEST_CODE && resultCode == Activity.RESULT_OK) {
@@ -426,6 +464,12 @@ import java.util.concurrent.Executors;
             markBoxSessionEvent("foreground-notification-return");
             return;
         }
+        if (com.winlator.box.BoxLaunchLease.enabled() &&
+                !com.winlator.box.BoxLaunchLease.process().claim(intent != null ? intent.getStringExtra("box_launch_capability") : null, this)) {
+            android.widget.Toast.makeText(this, R.string.box_launch_expired, android.widget.Toast.LENGTH_LONG).show();
+            return;
+        }
+        cancelSavedRecreationCapability();
         setIntent(intent);
         applyBoxLaunchIntent(intent);
         setupSessionLogging();
@@ -444,6 +488,7 @@ import java.util.concurrent.Executors;
     @Override
     public void onResume() {
         super.onResume();
+        cancelSavedRecreationCapability();
         hostLifecycleResumed = true;
         BoxAutomationState.setForegroundActivity("XServerDisplayActivity");
         if (uuVpnGuard != null) uuVpnGuard.onHostResumed();
@@ -517,6 +562,8 @@ import java.util.concurrent.Executors;
 
     @Override
     protected void onDestroy() {
+        if (rejectedLaunchCapability) { super.onDestroy(); return; }
+        if (isFinishing()) cancelSavedRecreationCapability();
         if (xServerView != null) xServerView.getRenderer().cancelAfterNextFrame();
         resumeGate.shutdown();
         hideResumeGate();

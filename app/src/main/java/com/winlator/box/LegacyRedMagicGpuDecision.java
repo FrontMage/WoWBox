@@ -22,6 +22,8 @@ final class LegacyRedMagicGpuDecision {
     static final String NEW_LIB = "libvulkan_freedreno.so";
     static final String WINE_SOURCE = "asset://wine-runtime-wowbox-mainline-openfonts-56f206c4.txz";
     static final String WINE_SHA = "56f206c4eb1da0d297ab6e73041e000793b05d285b7edf96e9e84914babe9de1";
+    static final String RWOA_WINE_SOURCE = "asset://wine-runtime-wowbox-rwoa-openfonts-6d87ba31.txz";
+    static final String RWOA_WINE_SHA = "6d87ba31266c616c3b3f3e0c5028d6c20f3e2e8a5b5d560065d46d92c645b344";
     static final String WINE_ID = "proton-11.0-1-arm64ec-wowbox-openfonts-9ac94fff";
     private static final Set<String> RELEASE_LAYER_TYPES = new HashSet<>(Arrays.asList(
             "base-imagefs", "graphics-wrapper-stack", "frame-generation-stack", "prefix-template",
@@ -54,7 +56,8 @@ final class LegacyRedMagicGpuDecision {
             }
         }
         // Late GPU selection is proven only for the shipped ARM64EC contract.
-        if (wine == null || !WINE_SOURCE.equals(wine.source) || !WINE_SHA.equals(wine.checksum) ||
+        if (wine == null || !((WINE_SOURCE.equals(wine.source) && WINE_SHA.equals(wine.checksum)) ||
+                (RWOA_WINE_SOURCE.equals(wine.source) && RWOA_WINE_SHA.equals(wine.checksum))) ||
                 !WINE_ID.equals(wine.runtimeIdentifier) || !("/opt/" + WINE_ID).equals(wine.target)) return false;
         if (gpu == null || !OLD_SOURCE.equals(gpu.source) || !OLD_SHA.equals(gpu.checksum) ||
                 !OLD_ID.equals(gpu.target) || !"tzst".equals(gpu.archive) ||
