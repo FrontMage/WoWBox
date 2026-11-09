@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export the public source corresponding to the v0.2 runtime inputs.
+"""Export the verified public source subset for the v0.3 runtime inputs.
 
 Wine/FEX are exported from exact Git commits, without worktree edits or Git
 history. Unchanged v0.1 Vulkan-wrapper and integration sources are reused from
@@ -162,6 +162,7 @@ def main():
                 metadata = {
                     "schemaVersion": 1,
                     "protonCommit": PROTON,
+                    "release": "v0.3.0",
                     "wineCommit": WINE,
                     "fexCommit": FEX,
                     "wineSourceUrl": "https://github.com/FrontMage/proton-wine",
@@ -179,12 +180,21 @@ def main():
                     "previousPublicBundleSha256": OLD_SOURCE_SHA,
                     "omittedPreviousSourceSymlinks": omitted_previous_links,
                     "omittedDependencies": "Test-binary repositories and range-v3 generated documentation only; exact public URLs and commits are listed above.",
+                    "v39Driver": {
+                        "upstreamRelease": "https://github.com/StevenMXZ/Adreno-Tools-Drivers/releases/tag/v39",
+                        "upstreamZipSha256": "572e415c11b636ea2a4c4968c60a9b24e459302549c8ea38e814dbd07e40654d",
+                        "upstreamLibrarySha256": "398b838b5d0b82b46ba2a209f8c2bd47bf3245c1059d5eed950b1db342b5cb39",
+                        "embeddedMesaVersion": "27.0.0-devel (git-2648b2059f)",
+                        "embeddedMesaBaseCommit": "2648b2059f1a412d64a8700dbbb75bbb4a768b0e",
+                        "sourceIncluded": False,
+                        "limitation": "Exact corresponding Mesa source tree and applied build patches have not been independently verified; the runtime sources archive does not contain them."
+                    },
                 }
                 add_bytes("SOURCE_MANIFEST.json", (json.dumps(metadata, indent=2) + "\n").encode())
                 add_bytes("wine-openfonts-mainline.patch", (ROOT / "tools/wine-openfonts-mainline.patch").read_bytes())
                 add_bytes("Integration/scripts/package-public-xinput.py", (ROOT / "scripts/package-public-xinput.py").read_bytes())
                 add_bytes("README.md", (
-                    "# WoW Box v0.2 runtime source inputs\n\n"
+                    "# WoW Box v0.3 runtime source inputs\n\n"
                     "`Wine/` and `FEX/` are exported from the exact public commits in SOURCE_MANIFEST.json. "
                     "The Wine binary was built from that Wine commit, with the public-font substitutions "
                     "and fallback aliases in wine-openfonts-mainline.patch applied to the distributed INF data. "
@@ -193,7 +203,8 @@ def main():
                     "its public packaging script removes only DWARF from the original v0.1 build. "
                     "VulkanWrapper/ and Integration/ are unchanged from the v0.1 public source bundle. "
                     "Consult WoW Box THIRD_PARTY_NOTICES.md for component licenses and the known "
-                    "provenance limits of inherited base-image libraries.\n"
+                    "provenance limits of inherited base-image libraries and the V39 driver. "
+                    "This archive does not contain the V39 driver's exact corresponding source.\n"
                 ).encode())
     temporary.replace(args.output)
     receipt = {"schemaVersion": 1, "archiveSha256": digest(args.output), "archiveBytes": args.output.stat().st_size,

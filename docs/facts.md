@@ -1,5 +1,27 @@
 # Facts
 
+- The 0.3.0 standard application uses `com.winlator.llm`, version code 19,
+  and version name `0.3.0`. The device-specific policy recognizes the
+  validated RedMagic NX809J / SM8850 combination and fails closed when
+  the SoC identity is unavailable.
+  Source: code-evidence (app/build.gradle:319-335).
+  Source: code-evidence (app/src/main/java/com/winlator/box/RedMagicDevicePolicy.java:9-20).
+
+- An isolated RedMagic NX809J 0.2 test installation was upgraded to a
+  standard 0.3.0 candidate without changing its checked spec, state, user
+  environment override or private test file. Nine layers matched; a neutral
+  GUI-path D3D9 probe mapped V39 and rendered for 20 seconds. This was a
+  single-device diagnostic, not general game or stability acceptance.
+  Source: config-evidence (docs/VALIDATION_0.3.0.md:1-7).
+
+- In a RedMagic NX809J diagnostic, the user confirmed that a previously
+  affected WoW Forever D3D12 scene no longer showed black blocks with V39,
+  Vulkan host composition and the two graphics cache settings. The user
+  later reported Battle.net and game crashes; the CEF mitigation did not
+  eliminate them. This is a device-specific diagnostic observation, not
+  a claim of general compatibility or long-term stability.
+  Source: user-confirmed (2026-11-09: black blocks disappeared; Battle.net and WoW still exited unexpectedly).
+
 - Wine's packaged INF adds non-overwriting `MS Gothic` and `Noto Sans CJK TC`
   DirectWrite replacements pointing to the bundled Source Han Sans CN font.
   Source: code-evidence (scripts/package-mainline-wine.py:20-70).
@@ -11,10 +33,8 @@
   Source: config-evidence (tools/runtime-mainline-provenance.json:24-34).
   Source: code-evidence (app/src/main/java/com/winlator/box/BoxLegacyLayerPolicy.java:3-21).
 
-- The standard preview build uses Android package `com.winlator.llm`, version
-  code 18 and version name `0.2.0-preview`. Its versioned runtime inputs and
-  source revisions are listed in `tools/runtime-mainline-provenance.json`.
-  Source: code-evidence (app/build.gradle:313-323).
+- The runtime inputs and source revisions are listed in
+  `tools/runtime-mainline-provenance.json`.
   Source: config-evidence (tools/runtime-mainline-provenance.json:1-24).
 
 - The standard preview does not enable the XR activity; its separate process

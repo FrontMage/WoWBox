@@ -1,4 +1,4 @@
-# 预览版发布核对
+# 发布核对
 
 以下是发布者的操作清单，不是设备游戏测试通过的声明。仅在所有必需项有对应证据后发布。
 
@@ -8,7 +8,7 @@
 - [ ] 构建输入锁定 Proton、Wine、FEX 的完整提交，以及每个运行资源的哈希和来源。
 - [ ] 复核公开资源许可、免费字体及其 GDI/DirectWrite 登记；排除 Microsoft 原生可选组件、账号、截图、私有配置和密钥。
 - [ ] `runtime-assets.json` 的 bundle 和各文件哈希与实际归档一致；本地预置资源后干净构建，发布后再匿名拉取重建。
-- [ ] 本地测试通过，最终 APK 是标准包 `com.winlator.llm`、versionCode 18、versionName `0.2.0-preview`，并与 v0.1.0 签名一致。
+- [ ] 本地测试通过，最终 APK 是标准包 `com.winlator.llm`、versionCode 19、versionName `0.3.0`，并与既有公开版签名一致。
 - [ ] `python3 scripts/verify-release-apk.py --apk <APK> --runtime-bundle <runtime-assets.tar.gz>` 通过；单独核验源码归档、许可清单、构建日志及无战网 relay 的运行路径。
 
 ## 安装和运行
@@ -23,4 +23,4 @@
 
 - [ ] 标准包、源码、运行资源、SHA256SUMS、更新说明和第三方许可全部对应同一构建；不发布 UU 包或战网 relay。
 - [ ] Release 文本分别列出设备、游戏、升级和新装的通过、未覆盖及失败项；不得把历史 APK 测试冒充最终版验证，也不得把 NOVA/Thor 诊断称为 RP6 验收或长期稳定性结论。
-- [ ] 使用 `v0.2.0-preview` 预发布，保留 `v0.1.0`；发布后验证匿名下载、远端哈希和源码构建。
+- [ ] 发布 `v0.3.0` 并保留已有版本；发布后验证匿名下载、远端哈希和源码构建。

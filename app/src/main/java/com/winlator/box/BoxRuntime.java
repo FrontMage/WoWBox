@@ -91,6 +91,10 @@ public class BoxRuntime {
                     throw new IllegalStateException("missing_persisted_box_spec");
                 }
                 spec = BoxSpec.load(context, persisted);
+                // A fresh RedMagic installation can use the tested 8E5 GPU
+                // candidate; never silently replace an existing user's spec.
+                BoxRedMagicGpuPolicy.applyFreshInstall(spec, isRedMagicReleaseTarget(),
+                        BuildConfig.APPLICATION_ID);
             }
             // Existing specs and user environment/launch targets are only
             // changed by an explicit, journaled release migration.
@@ -485,7 +489,28 @@ public class BoxRuntime {
         } catch (java.io.IOException error) {
             throw new IllegalStateException("initial_install_guard_failed", error);
         }
-        return refreshSpecFromBundledAsset(false);
+        // Unlike the legacy unconditional bundled refresh, reject any
+        // customized persisted fields rather than silently overwriting them.
+        try {
+            BoxSpec current = getSpec();
+            BoxSpec bundled = BoxSpec.fromJsonString(
+                    FileUtils.readString(context, BoxSpec.getBundledAssetPath()));
+            if (!current.boxId.equals(bundled.boxId)) {
+                throw new IllegalStateException("bundled_box_id_mismatch");
+            }
+            JSONObject persisted = new JSONObject(AtomicFileSupport.readUtf8(BoxPaths.getSpecFile(context)));
+            BoxInitialSpecRefreshPolicy.validate(persisted, bundled,
+                    isRedMagicReleaseTarget(), BuildConfig.APPLICATION_ID);
+            return current;
+        } catch (java.io.IOException | JSONException error) {
+            throw new IllegalStateException("initial_spec_validation_failed", error);
+        }
+    }
+
+    private static boolean isRedMagicReleaseTarget() {
+        return "com.winlator.llm".equals(BuildConfig.APPLICATION_ID) &&
+                !BuildConfig.UU_PROBE_BUILD && !BuildConfig.AGENT_DRIVE_PROBE_BUILD &&
+                RedMagicDevicePolicy.isTarget();
     }
 
     /**
@@ -847,6 +872,59 @@ public class BoxRuntime {
         return container;
     }
 
+    /** Prepare independently addressable 8E5 GPU files; persisted spec/state are untouched. */
+    public synchronized void prepareLegacyRedMagicGpuOverride() {
+        BoxSpec current = getSpec();
+        LegacyRedMagicGpuOverride.prepare(context, current, getState(), buildEnvSnapshot().values);
+    }
+
+    public synchronized JSONObject legacyRedMagicGpuOverrideStatus() throws JSONException {
+        return legacyRedMagicGpuOverrideStatus(null);
+    }
+
+    synchronized JSONObject legacyRedMagicGpuOverrideStatus(JSONObject verifiedLayers) throws JSONException {
+        BoxSpec current = getSpec();
+        JSONObject status = LegacyRedMagicGpuOverride.status(context, current, getState(), buildEnvSnapshot().values);
+        if (status.optBoolean("eligible", false) && !status.optBoolean("overrideAvailable", false)) {
+            JSONObject layers = verifiedLayers != null ? verifiedLayers : BoxDebugServer.get(context).verifyLayers();
+            LegacyGpuFallback.apply(status, layers);
+        }
+        return status;
+    }
+
+    public synchronized void requireLegacyRedMagicGpuOverrideReady(BoxDebugConfig debugConfig) {
+        try {
+            // A warm guest inherits its existing environment, but the
+            // legacy eligible path must still validate its managed layers.
+            boolean warm = XServerDisplayActivity.hasActiveSession();
+            Map<String, String> launchEnv = debugConfig != null && debugConfig.isEnabled()
+                    ? debugConfig.envOverrides : java.util.Collections.emptyMap();
+            if (LegacyGpuLaunchGate.isExplicitGpu(launchEnv)) return;
+            JSONObject status = legacyRedMagicGpuOverrideStatus();
+            boolean eligible = status.optBoolean("eligible", false);
+            boolean orphan = eligible && !warm && com.winlator.core.WineSessionProcessController.getInstance().hasActiveWineProcesses();
+            LegacyGpuLaunchGate.requireNoOrphan(eligible, warm, orphan);
+            if (!status.optBoolean("ready", false)) throw new IllegalStateException("redmagic_gpu_override_not_ready");
+            if (LegacyGpuLaunchGate.shouldVerify(status, warm, launchEnv)) {
+                BoxDebugServer server = BoxDebugServer.get(context);
+                JSONObject overlay = server.verifyRuntimeOverlay();
+                JSONObject layers = server.verifyLayers(overlay);
+                LegacyGpuLaunchGate.requireVerified(overlay, layers);
+            }
+        } catch (JSONException e) { throw new IllegalStateException("redmagic_gpu_override_status_failed", e); }
+    }
+
+    /** Called again at guest environment construction, after respecting explicit overrides. */
+    public synchronized String resolveLegacyRedMagicGpuDriverId(String currentId) {
+        try {
+            JSONObject status = legacyRedMagicGpuOverrideStatus();
+            if (!status.optBoolean("eligible", false)) return currentId;
+            if (!status.optBoolean("ready", false)) throw new IllegalStateException("redmagic_gpu_override_and_original_not_ready");
+            if (!LegacyRedMagicGpuDecision.OLD_ID.equals(currentId)) throw new IllegalStateException("redmagic_gpu_driver_changed");
+            return status.optBoolean("fallbackToOriginal", false) ? currentId : LegacyRedMagicGpuDecision.NEW_ID;
+        } catch (JSONException e) { throw new IllegalStateException("redmagic_gpu_override_status_failed", e); }
+    }
+
     public synchronized void configureContainer(Container container) {
         BoxSpec spec = getSpec();
         container.setName(BOX_CONTAINER_NAME);
@@ -982,6 +1060,11 @@ public class BoxRuntime {
     public synchronized EnvSnapshot buildEnvSnapshot() {
         BoxSpec spec = getSpec();
         EnvSnapshot snapshot = new EnvSnapshot();
+        // Keep persisted user configuration intact while supplying defaults
+        // to older installations below every explicit spec/runtime entry.
+        BoxGraphicsCacheDefaults.addTo(snapshot, spec.boxId,
+                BuildConfig.UU_PROBE_BUILD, BuildConfig.NATIVE_ARM_BOX,
+                BuildConfig.AGENT_DRIVE_PROBE_BUILD);
         snapshot.addAll("base", spec.env.base);
         snapshot.add("preset", "BOX_FEX_PRESET", spec.env.fexPreset);
         snapshot.addAll("overrides", spec.env.overrides);
@@ -1341,10 +1424,16 @@ public class BoxRuntime {
     }
 
     public String launchDesktop(BoxDebugConfig debugConfig) {
+        return launchDesktop(debugConfig, null);
+    }
+
+    public String launchDesktop(BoxDebugConfig debugConfig, BoxLaunchRequest request) {
         synchronized (BoxInstaller.class) {
         recoverPendingReleaseBeforeLaunch();
         requireNoPendingBundledReleaseUpgrade();
+        requireLegacyRedMagicGpuOverrideReady(debugConfig);
         requireWowInputBridgeMigrationComplete();
+        commitLaunchRequest(request);
         getOrCreateContainer();
         new BoxInstaller(context).prepareNativeDxEnvironment();
         recordLastLaunch("", true);
@@ -1355,7 +1444,7 @@ public class BoxRuntime {
         intent.putExtra("box_launch_mode", "desktop");
         intent.putExtra("box_session_id", sessionId);
         if (debugConfig != null) debugConfig.applyToIntent(intent);
-        context.startActivity(intent);
+        startSessionActivity(intent, sessionId);
         return sessionId;
         }
     }
@@ -1365,10 +1454,16 @@ public class BoxRuntime {
     }
 
     public String launchExecutable(String absoluteHostPath, BoxDebugConfig debugConfig) {
+        return launchExecutable(absoluteHostPath, debugConfig, null);
+    }
+
+    public String launchExecutable(String absoluteHostPath, BoxDebugConfig debugConfig, BoxLaunchRequest request) {
         synchronized (BoxInstaller.class) {
         recoverPendingReleaseBeforeLaunch();
         requireNoPendingBundledReleaseUpgrade();
+        requireLegacyRedMagicGpuOverrideReady(debugConfig);
         requireWowInputBridgeMigrationComplete();
+        commitLaunchRequest(request);
         getOrCreateContainer();
         new BoxInstaller(context).prepareNativeDxEnvironment();
         recordLastLaunch(absoluteHostPath, false);
@@ -1382,21 +1477,27 @@ public class BoxRuntime {
         intent.putExtra("box_executable_path", absoluteHostPath);
         intent.putExtra("box_session_id", sessionId);
         if (debugConfig != null) debugConfig.applyToIntent(intent);
-        context.startActivity(intent);
+        startSessionActivity(intent, sessionId);
         return sessionId;
         }
     }
 
     public String launchTarget(String targetId, BoxDebugConfig debugConfig) {
+        return launchTarget(targetId, debugConfig, null);
+    }
+
+    public String launchTarget(String targetId, BoxDebugConfig debugConfig, BoxLaunchRequest request) {
         synchronized (BoxInstaller.class) {
         recoverPendingReleaseBeforeLaunch();
         requireNoPendingBundledReleaseUpgrade();
+        requireLegacyRedMagicGpuOverrideReady(debugConfig);
         BoxSpec.Target target = requireLaunchTarget(targetId);
         BoxSpec bundledSpec = BoxSpec.fromJsonString(
                 FileUtils.readString(context, BoxSpec.getBundledAssetPath()));
         int controlsProfileId = resolveControlsProfileId(
                 target,
                 bundledSpec.launch.findTarget(target.id));
+        commitLaunchRequest(request);
         getOrCreateContainer();
         recordLastLaunch(target.guestPath, false);
         new BoxInstaller(context).prepareNativeDxEnvironment();
@@ -1409,12 +1510,30 @@ public class BoxRuntime {
         intent.putExtra("box_launch_target_id", target.id);
         intent.putExtra("box_executable_guest_path", target.guestPath);
         intent.putExtra("box_working_directory", target.workingDirectory);
-        intent.putStringArrayListExtra("box_executable_args", new ArrayList<>(target.args));
+        intent.putStringArrayListExtra("box_executable_args",
+                BattleNetCefLaunchPolicy.arguments(RedMagicDevicePolicy.isTarget(),
+                        BuildConfig.APPLICATION_ID, target.id, target.guestPath, target.args));
         intent.putExtra("box_controls_profile_id", controlsProfileId);
         intent.putExtra("box_session_id", sessionId);
         if (debugConfig != null) debugConfig.applyToIntent(intent);
-        context.startActivity(intent);
+        startSessionActivity(intent, sessionId);
         return sessionId;
+        }
+    }
+
+    private static void commitLaunchRequest(BoxLaunchRequest request) {
+        if (request != null && !request.tryCommit()) {
+            throw new java.util.concurrent.CancellationException("box_launch_cancelled");
+        }
+    }
+
+    private void startSessionActivity(Intent intent, String sessionId) {
+        try {
+            context.startActivity(intent);
+        } catch (RuntimeException failure) {
+            // Only close this request's metadata; never stop an existing guest.
+            getSessionManager().markFinishedIfRunning(sessionId, -1);
+            throw failure;
         }
     }
 

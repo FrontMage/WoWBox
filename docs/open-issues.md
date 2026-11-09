@@ -1,5 +1,22 @@
 # Open Issues
 
+- RedMagic V39 plus system Vulkan host composition cleared black blocks in
+  one user-confirmed WoW Forever D3D12 scene, but Battle.net and WoW exits
+  and frame pacing complaints remain unresolved. The CEF V8 flag is a
+  mitigation only and did not eliminate reported exits. The separate Wine
+  RtlWaitOnAddress backport has not been installed or validated on Android.
+  Source: user-confirmed (2026-11-09: report remaining crashes and stutter).
+
+- The standard 0.3.0 candidate passed short RedMagic fresh-install and 0.2
+  upgrade D3D9 probes, but other upgrade histories, other devices and final
+  standard-package WoW stability still require validation.
+
+- A launch cancelled while background validation is pending is covered by
+  unit tests, but the narrow interval after a launch is committed and before
+  Android starts the target activity has not been exercised under rapid app
+  backgrounding. A blocked background activity could leave stale session
+  metadata and needs device-level lifecycle validation.
+
 - On NOVA the earlier `77b5d903...` candidate reached the Titan login screen
   and ran briefly with Battle.net open. The selected trial account had no
   game time, so world entry was not tested. The later `3fcdf431...` font

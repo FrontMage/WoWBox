@@ -59,7 +59,9 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         new Thread(() -> {
             String error = null;
             try {
-                BoxRuntime.get(getApplicationContext()).recoverPendingReleaseBeforeLaunch();
+                BoxRuntime runtime = BoxRuntime.get(getApplicationContext());
+                runtime.recoverPendingReleaseBeforeLaunch();
+                runtime.prepareLegacyRedMagicGpuOverride();
             }
             catch (RuntimeException failure) {
                 error = failure.getMessage() != null ? failure.getMessage() : failure.getClass().getSimpleName();

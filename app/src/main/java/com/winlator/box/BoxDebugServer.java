@@ -313,12 +313,14 @@ public class BoxDebugServer {
         JSONObject renderdoc = new RenderDocCaptureManager(context).buildStatus();
         JSONObject nativeGraphics = new BoxInstaller(context).nativeDxStatus();
         JSONObject processes = XServerDisplayActivity.requestCurrentProcessSnapshot(250);
+        JSONObject gpuOverride = runtime.legacyRedMagicGpuOverrideStatus(layers);
         JSONArray blockingReasons = new JSONArray();
 
         if (!permissions.optBoolean("ok", false)) blockingReasons.put("missing_permission");
         if (!foreground.optBoolean("appForeground", false)) blockingReasons.put("not_foreground");
         if (!runtime.isInstalled()) blockingReasons.put("box_not_installed");
         if (!layers.optBoolean("ok", false)) blockingReasons.put("layer_mismatch");
+        if (!gpuOverride.optBoolean("ready", false)) blockingReasons.put("redmagic_gpu_override_not_ready");
         if (!runtimeOverlay.optBoolean("ok", false)) blockingReasons.put("runtime_overlay_mismatch");
         if (!inputBridgeMigration.optBoolean("complete", false)) {
             blockingReasons.put("wow_input_bridge_migration_required");
@@ -345,6 +347,7 @@ public class BoxDebugServer {
         json.put("state", runtime.getState());
         json.put("currentSession", sessionManager.getCurrentSessionMeta());
         json.put("layers", layers);
+        json.put("gpuOverride", gpuOverride);
         json.put("runtimeOverlay", runtimeOverlay);
         json.put("wowInputBridgeMigration", inputBridgeMigration);
         json.put("nativeGraphics", nativeGraphics);
@@ -862,7 +865,7 @@ public class BoxDebugServer {
                         winePrefixDeltaChecksum);
     }
 
-    private JSONObject verifyLayers(JSONObject runtimeOverlay) throws JSONException {
+    JSONObject verifyLayers(JSONObject runtimeOverlay) throws JSONException {
         BoxSpec spec = runtime.getSpec();
         JSONArray installedLayers = runtime.buildInstalledLayersJson();
         JSONArray layers = new JSONArray();

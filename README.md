@@ -6,19 +6,19 @@
 
 **日常使用不需要 AI 助手、Codex、ADB 或电脑。** 下载 APK 后，按照下面的 Android 界面操作即可。
 
-[下载 v0.2.0 预览版](https://github.com/FrontMage/WoWBox/releases/tag/v0.2.0-preview) · [构建与运行资源](docs/BUILD.md) · [第三方软件和源码](THIRD_PARTY_NOTICES.md)
+[下载 v0.3.0](https://github.com/FrontMage/WoWBox/releases/tag/v0.3.0) · [构建与运行资源](docs/BUILD.md) · [第三方软件和源码](THIRD_PARTY_NOTICES.md)
 
 ## 设备与版本
 
 - APK 包名为 `com.winlator.llm`，面向 ARM64 Android；最低安装 API 为 Android 8.0。
-- 内置图形栈面向 Qualcomm Adreno。现有开发版本的验证不能推定所有设备、游戏版本都兼容；Mali、Xclipse 和较新的 Adreno 8xx 没有本公开版的通用支持承诺。
-- RP5 的 D3D12 GPU hang，以及长时间稳定性仍有未解决问题。公开版采用共享配置，不包含 Thor、RedMagic、UU 的设备实验配置。
-- 本版是预览版。具体设备和游戏的测试范围、未覆盖项目及已知问题以本版 Release 说明为准；其他设备的表现可能不同。
+- 内置图形栈面向 Qualcomm Adreno。红魔 NX809J / SM8850 的新安装及符合原版默认条件的既有安装使用 Turnip V39；已明确选择的其他驱动或图形环境保持优先。其他 Adreno 8xx、Mali、Xclipse 和其他设备不因此获得兼容性保证。
+- 红魔上的诊断候选曾消除一个 WoW Forever D3D12 场景的黑块，但战网和 WoW 仍有用户报告的闪退，CPU 频率变化伴随的卡顿也在排查；D3D11 和长时间稳定性尚未验收。
+- 具体设备、新装、升级和游戏的测试范围、未覆盖项目及已知问题以本版 Release 说明为准；其他设备的表现可能不同。
 - 首次安装会展开运行资源，建议预留至少 8 GB 可用空间；升级现有运行时建议预留至少 10 GB，游戏客户端和游戏更新需要额外空间。所需空间可能因设备及已有数据而不同。
 
 ## 1. 安装并等待资源初始化
 
-1. 从上面的 Release 下载 **WoWBox-v0.2.0-preview-arm64.apk**。
+1. 从上面的 Release 下载 **WoWBox-v0.3.0-arm64.apk**。
 2. 在 Android 文件管理器打开 APK，按系统提示允许该来源安装应用。
 3. 启动 **WoW Box**，授予存储权限。
 4. 等待 **Box Install** 完成并进入首页。应用会自动创建运行环境、安装 Wine/FEX 和图形资源，无需另建容器或复制 DLL。
@@ -117,6 +117,7 @@ DLL 不随 APK 分发。导入校验可能不接受不同版本；出现启动�
 - Battle.net 无响应时使用 **Exit → 首页 Battle.net** 重新打开。
 - 已安装公开版时，退出游戏和容器，再安装同包名、同签名的新 APK；安装时选择更新，保留应用数据。
 - 更新后打开 WoW Box，在首页选择 **Update runtime** 并等待完成，然后启动战网。若提示空间不足，请腾出空间重试；若现有运行时或前缀无法安全识别，应用会保留文件并停止自动更新，不要卸载或清除数据。
+- 红魔上一版默认图形配置的保数据升级已在隔离测试副本中做过短时验证；自定义驱动及其他设备的完整升级覆盖仍有限，不要为了切换驱动卸载应用或清除数据。具体范围见本版 Release 说明。
 - 安装不同签名的自行构建包前先备份数据；不要通过普通更新操作卸载应用或清除应用数据。
 - 从旧内部开发包迁移时，运行资源身份不同可能触发数据保护检查。不要强制重建已有前缀；先备份再处理迁移。
 - 游戏放在 `D:` 时，可在退出会话后用 Android 文件管理器备份整个目录，尤其是 `WTF` 和 `Interface/AddOns`。
@@ -133,10 +134,10 @@ DLL 不随 APK 分发。导入校验可能不接受不同版本；出现启动�
 
 如需日志，在 **Settings** 启用 **Enable Wine debug** 并选择日志配置，保存后重启；运行菜单 **Logs** 显示已启用的输出，复现结束后关闭详细日志。
 
-标准 APK 已预选图形驱动，首页没有通用驱动切换菜单。请报告黑屏、条纹或 GPU 错误的设备与版本，不要混用其他设备的 DLL 或驱动包。
+标准 APK 已预选图形驱动，首页没有通用驱动切换菜单。红魔测试设备的战网启动会尝试 `--js-flags=--no-incremental-marking` 作为 CEF 不稳定的临时缓解；它不保证消除闪退。请报告黑屏、条纹或 GPU 错误的设备与版本，不要混用其他设备的 DLL 或驱动包。
 
 ## 来源与许可证
 
-应用基于 BrunoSX 的 Winlator；本仓库保留其 MIT 许可证。Wine、FEX、Mesa、DXVK、vkd3d-proton、PRoot、OpenXR、LSFG、字体等组件各自保留原许可证，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+应用基于 BrunoSX 的 Winlator，保留其原 MIT 许可证。Vulkan 宿主合成器包含基于 GameNative 的修改代码，原项目以 GPL-3.0 发布；其许可证原文同时提供于源码和 APK 的 `assets/licenses/GameNative-GPL-3.0.txt`。Wine、FEX、Mesa、DXVK、vkd3d-proton、PRoot、OpenXR、LSFG、字体等组件各自保留原许可证，详见 [许可概览](LICENSING.md) 与 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 公开包使用 Wine 字体、Source Han Sans CN 和 DejaVu；不分发 Microsoft 字体、原生 Microsoft 可选组件、Battle.net 安装器、游戏数据或 `Lossless.dll`。

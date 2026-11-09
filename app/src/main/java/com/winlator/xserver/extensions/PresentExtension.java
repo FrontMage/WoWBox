@@ -5,6 +5,8 @@ import static com.winlator.xserver.XClientRequestHandler.RESPONSE_CODE_SUCCESS;
 import android.util.SparseArray;
 
 import com.winlator.renderer.GPUImage;
+import com.winlator.renderer.VulkanRenderer;
+import com.winlator.xserver.errors.BadAlloc;
 import com.winlator.renderer.Texture;
 import com.winlator.xconnector.XInputStream;
 import com.winlator.xconnector.XOutputStream;
@@ -150,7 +152,15 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
         long msc = ust / FAKE_INTERVAL;
 
         synchronized (content.renderLock) {
-            content.copyArea((short)0, (short)0, xOff, yOff, pixmap.drawable.width, pixmap.drawable.height, pixmap.drawable);
+            if (client.xServer.getRenderer() instanceof VulkanRenderer) {
+                VulkanRenderer renderer = (VulkanRenderer)client.xServer.getRenderer();
+                // AHB imports are GPU-copied into owned native storage and fenced before reuse.
+                if (!renderer.onUpdateWindowContentDirect(window, pixmap.drawable, xOff, yOff)) {
+                    throw new BadAlloc();
+                }
+            } else {
+                content.copyArea((short)0, (short)0, xOff, yOff, pixmap.drawable.width, pixmap.drawable.height, pixmap.drawable);
+            }
             sendIdleNotify(window, pixmap, serial, idleFence);
             sendCompleteNotify(window, serial, Kind.PIXMAP, Mode.COPY, ust, msc);
         }
@@ -169,7 +179,7 @@ public class PresentExtension implements Extension, XResourceManager.OnResourceL
             windowLifecycleRegistered = true;
         }
 
-        if (GPUImage.isSupported() && !mask.isEmpty()) {
+        if (!(client.xServer.getRenderer() instanceof VulkanRenderer) && GPUImage.isSupported() && !mask.isEmpty()) {
             Drawable content = window.getContent();
             final Texture oldTexture = content.getTexture();
             client.xServer.getRenderer().getRendererView().queueEvent(oldTexture::destroy);

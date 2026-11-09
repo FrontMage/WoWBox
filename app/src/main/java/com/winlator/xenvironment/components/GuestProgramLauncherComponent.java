@@ -45,6 +45,8 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
     private static int pid = -1;
     private String[] bindingPaths;
     private EnvVars envVars;
+    private EnvVars boxExplicitGpuEnv;
+    private com.winlator.box.BoundSessionEnvironment boundSessionEnvironment;
     private String fexcoreVersion = DefaultVersion.FEXCORE;
     private String fexcorePreset = FEXCorePreset.INTERMEDIATE;
     private Callback<Integer> terminationCallback;
@@ -292,6 +294,12 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         this.envVars = envVars;
     }
 
+    public void setBoxExplicitGpuEnv(EnvVars envVars) { this.boxExplicitGpuEnv = envVars; }
+    public void setBoxSessionId(String sessionId) {
+        if (boundSessionEnvironment != null) throw new IllegalStateException("guest_session_already_bound");
+        boundSessionEnvironment = new com.winlator.box.BoundSessionEnvironment(sessionId);
+    }
+
     public void setFEXCoreVersion(String fexcoreVersion) {
         this.fexcoreVersion = fexcoreVersion != null ? fexcoreVersion : DefaultVersion.FEXCORE;
     }
@@ -457,15 +465,35 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
             }
             envVars.remove("HODLL64");
 
-            // Inject Adrenotools so the wrapper can load the selected Turnip asset.
-            new AdrenotoolsManager(context).setDriverById(envVars, imageFs,
-                    BoxRuntime.get(context).getGpuDriverId());
+            // This is the final guest injection point. Preserve explicit user driver
+            // environment, otherwise re-check the independently verified 8E5 override.
+            BoxRuntime boxRuntime = BoxRuntime.get(context);
+            java.util.Map<String,String> gpuUserEnv = boxMode ? boxRuntime.buildEnvSnapshot().values : java.util.Collections.emptyMap();
+            if (boxMode && com.winlator.box.GpuExplicitEnvironmentPolicy.apply(gpuUserEnv, boxExplicitGpuEnv, envVars)) {
+                if (com.winlator.box.GpuExplicitEnvironmentPolicy.onlyAdditiveIcd(gpuUserEnv, boxExplicitGpuEnv)) {
+                    // Do not silently replace the existing default driver when
+                    // the user only adds an ICD alongside it.
+                    new AdrenotoolsManager(context).setDriverById(envVars, imageFs, boxRuntime.getGpuDriverId());
+                }
+                if ((envVars.has("ADRENOTOOLS_DRIVER_PATH") || envVars.has("ADRENOTOOLS_DRIVER_NAME")) &&
+                        !envVars.has("ADRENOTOOLS_HOOKS_PATH")) {
+                    envVars.put("ADRENOTOOLS_HOOKS_PATH", imageFs.getLibDir().getAbsolutePath());
+                }
+            } else {
+                String driverId = boxMode ? boxRuntime.resolveLegacyRedMagicGpuDriverId(boxRuntime.getGpuDriverId()) : boxRuntime.getGpuDriverId();
+                new AdrenotoolsManager(context).setDriverById(envVars, imageFs, driverId);
+            }
         }
 
         // The UU Box preference owns capture activation after every environment merge.
         // Legacy /env and launch debug overrides cannot silently re-enable it.
         if (BuildConfig.UU_PROBE_BUILD && boxMode && isArm64ecWine) {
             new RenderDocCaptureManager(context).applyLaunchEnvironment(envVars, isArm64ecWine);
+        }
+
+        if (boxMode && boundSessionEnvironment != null) {
+            boundSessionEnvironment.write(envVars, (sessionId, actualEnv) ->
+                    BoxRuntime.get(context).getSessionManager().writeEffectiveEnv(sessionId, actualEnv));
         }
 
         boolean bindSHM = envVars.get("WINEESYNC").equals("1");

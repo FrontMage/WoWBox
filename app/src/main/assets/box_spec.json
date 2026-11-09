@@ -153,6 +153,12 @@
         "source": "asset://graphics_driver/adrenotools-turnip25.3.6-ir3-armnative-ce8ab1ea.tzst",
         "checksum": "ce8ab1eacf0dbc88e7ddb0dfcde307cf72de77f8183a297aacf94e2cfa7d5bee",
         "driverId": "turnip25.3.6-ir3-armnative-ce8ab1ea"
+      },
+      {
+        "version": "stevenmxz-gen8-v39",
+        "source": "asset://graphics_driver/adrenotools-stevenmxz-turnip-gen8-v39-ad2b2d54.tzst",
+        "checksum": "ad2b2d546e77061d68b35164a0dd092ae5bb72d71b931e5a053eae9053ccdf4e",
+        "driverId": "stevenmxz-turnip-gen8-v39-ad2b2d54"
       }
     ]
   },
@@ -274,6 +280,8 @@
       "FEX_OUTPUTLOG": "stderr",
       "DXVK_LOG_LEVEL": "info",
       "DXVK_HUD": "fps,devinfo",
+      "DXVK_CONFIG": "d3d11.cachedDynamicResources = vic",
+      "VKD3D_CONFIG": "force_host_cached",
       "TU_DEBUG": "nolrz",
       "DISABLE_BCN_COMPUTE": "1",
       "BCN_COMPUTE_AUTO": "1"

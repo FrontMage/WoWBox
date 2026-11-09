@@ -54,3 +54,30 @@ target_link_libraries(winlator
                       GLESv2
                       GLESv3
                       adrenotools)
+
+option(WINLATOR_HOST_VULKAN_RENDERER "Build the system-Vulkan host compositor" OFF)
+if(WINLATOR_HOST_VULKAN_RENDERER)
+    # GameNative v1.2.1 (205cbf8d), independent of guest graphics assets.
+    find_program(WINLATOR_GLSLANG_VALIDATOR glslangValidator NO_CMAKE_FIND_ROOT_PATH REQUIRED)
+    foreach(shader vert frag)
+        add_custom_command(
+            OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/window_${shader}.h
+            COMMAND ${WINLATOR_GLSLANG_VALIDATOR} -V --vn window_${shader}_code -x
+                    -o ${CMAKE_CURRENT_BINARY_DIR}/window_${shader}.h
+                    ${CMAKE_CURRENT_SOURCE_DIR}/winlator/window.${shader}
+            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/winlator/window.${shader}
+            VERBATIM)
+    endforeach()
+    add_library(vulkan_renderer SHARED
+                winlator/vulkan_jni.cpp
+                winlator/VulkanRendererContext.cpp
+                winlator/VulkanRendererScanout.cpp
+                ${CMAKE_CURRENT_BINARY_DIR}/window_vert.h
+                ${CMAKE_CURRENT_BINARY_DIR}/window_frag.h)
+    target_include_directories(vulkan_renderer PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+    target_compile_features(vulkan_renderer PRIVATE cxx_std_17)
+    target_compile_definitions(vulkan_renderer PRIVATE VK_USE_PLATFORM_ANDROID_KHR)
+    target_compile_options(vulkan_renderer PRIVATE -Wall -Wextra -fvisibility=hidden)
+    target_link_libraries(vulkan_renderer log android vulkan dl atomic)
+    target_link_options(vulkan_renderer PRIVATE -Wl,-z,max-page-size=16384)
+endif()

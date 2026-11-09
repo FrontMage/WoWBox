@@ -185,9 +185,9 @@ def main():
     parser.add_argument("--runtime-bundle", type=Path)
     parser.add_argument("--sdk-dir")
     parser.add_argument("--build-tools", default="35.0.0")
-    parser.add_argument("--release", default="v0.2.0-preview")
-    parser.add_argument("--version-code", type=int, default=18)
-    parser.add_argument("--version-name", default="0.2.0-preview")
+    parser.add_argument("--release", default="v0.3.0")
+    parser.add_argument("--version-code", type=int, default=19)
+    parser.add_argument("--version-name", default="0.3.0")
     args = parser.parse_args()
     try:
         print(json.dumps(verify(args), ensure_ascii=False, indent=2))

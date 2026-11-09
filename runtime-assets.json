@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "version": "v0.2.0-preview",
+  "version": "v0.3.0",
   "bundle": {
-    "filename": "WoWBox-v0.2.0-preview-runtime-assets.tar.gz",
-    "url": "https://github.com/FrontMage/WoWBox/releases/download/v0.2.0-preview/WoWBox-v0.2.0-preview-runtime-assets.tar.gz",
-    "sha256": "0da7587b9b88057d48ddfd57fadee7e3f5f1e9fa699bf2cb8a56d57c91952c02"
+    "filename": "WoWBox-v0.3.0-runtime-assets.tar.gz",
+    "url": "https://github.com/FrontMage/WoWBox/releases/download/v0.3.0/WoWBox-v0.3.0-runtime-assets.tar.gz",
+    "sha256": "43c6c9f17b368ef534f3bf1917e9a4c1a41c6113de0d3952172e3dbff88377f6"
   },
   "files": [
     {
       "path": "app/src/main/assets/box_spec.json",
-      "sha256": "ff5512e83cdd70ab8ed0a6e97f3ba5cbf6b91a35d7bea977ae7bdc476cc0d589",
-      "sizeBytes": 9877,
+      "sha256": "ab6fdb4016592856f4d9d8343deccc73fded23df036e9cf63b18bf5df1093c1f",
+      "sizeBytes": 10279,
       "mode": 420
     },
     {
@@ -84,6 +84,18 @@
       "sha256": "1ba1c3a2cefa30a3dcf4216ed57d9356e2504fdbc61130a07cafbd3785dde86e",
       "sizeBytes": 19642,
       "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/graphics_driver/adrenotools-stevenmxz-turnip-gen8-v39-ad2b2d54.tzst",
+      "sha256": "ad2b2d546e77061d68b35164a0dd092ae5bb72d71b931e5a053eae9053ccdf4e",
+      "sizeBytes": 2073580,
+      "mode": 420,
+      "upstreamUrl": "https://github.com/StevenMXZ/Adreno-Tools-Drivers/releases/download/v39/Turnip_Gen8_V39.zip",
+      "upstreamZipSha256": "572e415c11b636ea2a4c4968c60a9b24e459302549c8ea38e814dbd07e40654d",
+      "upstreamLibrarySha256": "398b838b5d0b82b46ba2a209f8c2bd47bf3245c1059d5eed950b1db342b5cb39",
+      "embeddedMesaVersion": "27.0.0-devel (git-2648b2059f)",
+      "embeddedMesaBaseCommit": "2648b2059f1a412d64a8700dbbb75bbb4a768b0e",
+      "provenanceNote": "ZIP contents repacked without modifying meta.json or driver ELF; exact corresponding Mesa source and patch set not independently verified"
     },
     {
       "path": "app/src/main/assets/graphics_driver/adrenotools-turnip25.3.6-ir3-armnative-ce8ab1ea.tzst",
@@ -275,6 +287,12 @@
       "path": "app/src/main/assets/licenses/FEX-MIT-LICENSE.txt",
       "sha256": "f34a779f56b36d22b20e1b990d23e583a6a7ca071331925fa46156441c77a1ee",
       "sizeBytes": 1094,
+      "mode": 420
+    },
+    {
+      "path": "app/src/main/assets/licenses/GameNative-GPL-3.0.txt",
+      "sha256": "c8264e42ef8f1b8f6e9d7086bbf778472e2bc636018437d5821f6ee76f411ed1",
+      "sizeBytes": 35123,
       "mode": 420
     },
     {

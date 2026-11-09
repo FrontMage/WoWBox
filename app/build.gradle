@@ -4,6 +4,14 @@ import groovy.json.JsonSlurper
 
 def uuProbeBuild = project.findProperty("uuProbe")?.toString()?.toBoolean() ?: false
 def agentDriveProbeBuild = project.findProperty("agentDriveProbe")?.toString()?.toBoolean() ?: false
+// Package system Vulkan composition for standard builds; runtime selection
+// remains restricted to the specifically validated RedMagic device.
+def wowBoxVulkanHostBuild = project.hasProperty("wowBoxVulkanHost") ?
+        project.property("wowBoxVulkanHost").toString().toBoolean() :
+        (!uuProbeBuild && !agentDriveProbeBuild)
+if (wowBoxVulkanHostBuild && (uuProbeBuild || agentDriveProbeBuild)) {
+    throw new GradleException("wowBoxVulkanHost is only supported for ordinary Box builds")
+}
 def minimalAssetsBuild =
         project.findProperty("minimalAssets")?.toString()?.toBoolean() ?:
         project.findProperty("minimalUuAssets")?.toString()?.toBoolean() ?:
@@ -314,10 +322,16 @@ android {
         applicationId uuProbeBuild ? 'com.blizzard.diablo.immortal' : 'com.winlator.llm'
         minSdkVersion 26
         targetSdkVersion 28
-        versionCode 18
-        versionName "0.2.0-preview"
+        versionCode 19
+        versionName "0.3.0"
+        externalNativeBuild {
+            cmake {
+                arguments "-DWINLATOR_HOST_VULKAN_RENDERER=${wowBoxVulkanHostBuild ? 'ON' : 'OFF'}"
+            }
+        }
         buildConfigField 'boolean', 'UU_PROBE_BUILD', uuProbeBuild.toString()
         buildConfigField 'boolean', 'NATIVE_ARM_BOX', 'false'
+        buildConfigField 'boolean', 'WOW_BOX_VULKAN_HOST', wowBoxVulkanHostBuild.toString()
         buildConfigField 'boolean', 'AGENT_DRIVE_PROBE_BUILD', agentDriveProbeBuild.toString()
         buildConfigField 'boolean', 'MINIMAL_ASSETS_BUILD', minimalAssetsBuild.toString()
         buildConfigField 'String', 'MINIMAL_SPEC_ASSET', "\"${minimalAssetsBuild ? selectedMinimalSpec : ''}\""

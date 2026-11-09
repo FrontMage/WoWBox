@@ -2,6 +2,7 @@ package com.winlator.xserver.extensions;
 
 import android.util.Log;
 import com.winlator.renderer.GPUImage;
+import com.winlator.renderer.VulkanRenderer;
 
 import static com.winlator.xserver.XClientRequestHandler.RESPONSE_CODE_SUCCESS;
 
@@ -154,7 +155,8 @@ public class DRI3Extension implements Extension {
     private void pixmapFromHardwareBuffer(XClient client, int pixmapId, short width, short height, byte depth, int fd) throws IOException, XRequestError {
         try {
             GPUImage gpuImage = new GPUImage(fd);
-            Drawable drawable = client.xServer.drawableManager.createDrawable(pixmapId, gpuImage.getStride(), height, depth);
+            boolean vulkan = client.xServer.getRenderer() instanceof VulkanRenderer;
+            Drawable drawable = client.xServer.drawableManager.createDrawable(pixmapId, vulkan ? width : gpuImage.getStride(), height, depth);
             drawable.setTexture(gpuImage);
             Pixmap pixmap = client.xServer.pixmapManager.createPixmap(drawable);
             if (pixmap == null) throw new BadIdChoice(pixmapId);
@@ -171,7 +173,8 @@ public class DRI3Extension implements Extension {
             if (buffer == null) throw new BadAlloc();
             
             short totalWidth = (short)(stride / 4);
-            Drawable drawable = client.xServer.drawableManager.createDrawable(pixmapId, totalWidth, height, depth);
+            boolean vulkan = client.xServer.getRenderer() instanceof VulkanRenderer;
+            Drawable drawable = client.xServer.drawableManager.createDrawable(pixmapId, vulkan ? width : totalWidth, height, depth);
             drawable.setData(buffer);
             drawable.setTexture(null);
             drawable.setOnDestroyListener(onDestroyDrawableListener);

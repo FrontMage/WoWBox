@@ -86,6 +86,9 @@ import com.winlator.math.Mathf;
 import com.winlator.renderer.GLRenderer;
 import com.winlator.renderer.XServerRenderer;
 import com.winlator.widget.XServerRendererView;
+import com.winlator.widget.VulkanXServerView;
+import com.winlator.box.BoxDisplayRendererPolicy;
+import com.winlator.box.RedMagicDevicePolicy;
 import com.winlator.widget.FrameRating;
 import com.winlator.widget.HUDLayer;
 import com.winlator.widget.ImeBridgeEditText;
@@ -982,6 +985,7 @@ import java.util.concurrent.Executors;
         GuestProgramLauncherComponent guestProgramLauncherComponent = new GuestProgramLauncherComponent();
         guestProgramLauncherComponent.setArm64ecWine(wineInfo != null && wineInfo.isArm64EC());
         guestProgramLauncherComponent.setBoxMode(boxSessionId != null && !boxSessionId.isEmpty());
+        guestProgramLauncherComponent.setBoxSessionId(boxSessionId);
 
         if (container != null) {
             if (container.getStartupSelection() == Container.STARTUP_SELECTION_AGGRESSIVE) winHandler.killProcess("services.exe");
@@ -1011,6 +1015,22 @@ import java.util.concurrent.Executors;
             if (!envVars.has("WINEESYNC")) envVars.put("WINEESYNC", "1");
 
             applyBoxDebugConfig();
+            if (boxSessionId != null && !boxSessionId.isEmpty()) {
+                // Track only user-provided selection sources, independently of
+                // the earlier auto-generated wrapper ICD environment.
+                EnvVars explicit = new EnvVars();
+                explicit.putAll(container.getEnvVars());
+                if (shortcut != null) explicit.putAll(shortcut.getExtra("envVars"));
+                if (boxRuntime != null) {
+                    for (java.util.Map.Entry<String, String> item : boxRuntime.getRuntimeOverrides().entrySet()) explicit.put(item.getKey(), item.getValue());
+                }
+                if (boxDebugConfig != null && boxDebugConfig.isEnabled()) {
+                    for (java.util.Map.Entry<String, String> item : boxDebugConfig.envOverrides.entrySet()) explicit.put(item.getKey(), item.getValue());
+                }
+                EnvVars gpuExplicit = new EnvVars();
+                for (String key : com.winlator.box.GpuExplicitEnvironmentPolicy.KEYS) if (explicit.has(key)) gpuExplicit.put(key, explicit.get(key));
+                guestProgramLauncherComponent.setBoxExplicitGpuEnv(gpuExplicit);
+            }
             WineDebugConfig.State wineDebugState =
                     WineDebugConfig.fromPreferences(preferences);
             // WINEDEBUG has one owner. Remove legacy spec/container/shortcut/runtime
@@ -1194,8 +1214,13 @@ import java.util.concurrent.Executors;
     private void setupUI() {
         FrameLayout rootView = findViewById(R.id.FLXServerDisplay);
         imeBridgeHost = rootView;
-        selectedDisplayRenderer = "gl";
-        xServerView = new XServerView(this, xServer);
+        selectedDisplayRenderer = BoxDisplayRendererPolicy.selectOrdinaryBox(
+                BuildConfig.WOW_BOX_VULKAN_HOST, boxLaunchMode != null && !boxLaunchMode.isEmpty(),
+                !BuildConfig.UU_PROBE_BUILD && !BuildConfig.AGENT_DRIVE_PROBE_BUILD &&
+                        RedMagicDevicePolicy.isTarget());
+        xServerView = "vulkan".equals(selectedDisplayRenderer)
+                ? new VulkanXServerView(this, xServer) : new XServerView(this, xServer);
+        Log.i("BoxDisplayRenderer", "selected=" + selectedDisplayRenderer);
         final XServerRenderer renderer = xServerView.getRenderer();
         renderer.setCursorVisible(false);
 
@@ -1847,7 +1872,13 @@ import java.util.concurrent.Executors;
             ParsedConfig cfg = ParsedConfig.parseSemicolonList(graphicsDriverConfig);
 
             // Adrenotools driver bundle version (e.g. "turnip26.0.0").
-            if (!envVars.has("ADRENOTOOLS_DRIVER_PATH") && !envVars.has("ADRENOTOOLS_DRIVER_NAME")) {
+            // Box receives shortcut/debug overrides later; selecting here can mix
+            // one user field with one generated field. Defer Box selection until
+            // GuestProgramLauncherComponent has finished all merges.
+            boolean deferBoxGpu = com.winlator.box.GpuExplicitEnvironmentPolicy.shouldDefer(
+                    boxSessionId != null && !boxSessionId.isEmpty(), wineInfo != null && wineInfo.isArm64EC());
+            if (!deferBoxGpu &&
+                    !envVars.has("ADRENOTOOLS_DRIVER_PATH") && !envVars.has("ADRENOTOOLS_DRIVER_NAME")) {
                 String driverId = cfg.get("version", "turnip" + DefaultVersion.ADRENOTOOLS_TURNIP);
                 new AdrenotoolsManager(this).setDriverById(envVars, imageFs, driverId);
             }

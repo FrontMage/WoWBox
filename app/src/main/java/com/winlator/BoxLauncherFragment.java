@@ -19,7 +19,10 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.winlator.box.BoxPaths;
+import com.winlator.box.BoxDebugConfig;
 import com.winlator.box.BoxInstaller;
+import com.winlator.box.BoxLaunchController;
+import com.winlator.box.BoxLaunchRequest;
 import com.winlator.box.BoxRuntime;
 import com.winlator.box.BoxSpec;
 
@@ -44,6 +47,9 @@ public class BoxLauncherFragment extends Fragment {
     private boolean upgrading;
     private boolean recovering;
     private boolean recoveryFailed;
+    private boolean gpuFallback;
+    private boolean gpuBlocked;
+    private final BoxLaunchController launchController = new BoxLaunchController();
     private BoxRuntime runtime;
 
     @Nullable
@@ -76,7 +82,8 @@ public class BoxLauncherFragment extends Fragment {
         });
 
         ((AppCompatActivity) requireActivity()).getSupportActionBar().setTitle(R.string.box_launcher_title);
-        refreshRuntimeState();
+        if (launchController.isPending()) showLaunchChecking();
+        else refreshRuntimeState();
     }
 
     @Override
@@ -87,8 +94,22 @@ public class BoxLauncherFragment extends Fragment {
         }
     }
 
+    @Override
+    public void onPause() {
+        launchController.cancelPending();
+        launchController.releaseCommitted();
+        super.onPause();
+    }
+
+    @Override
+    public void onDestroyView() {
+        launchController.cancelPending();
+        launchController.releaseCommitted();
+        super.onDestroyView();
+    }
+
     private void refreshRuntimeState() {
-        if (recovering || upgrading) return;
+        if (recovering || upgrading || launchController.isPending()) return;
         final androidx.fragment.app.FragmentActivity activity = getActivity();
         if (activity == null) return;
         recovering = true;
@@ -98,14 +119,23 @@ public class BoxLauncherFragment extends Fragment {
         desktopButton.setEnabled(false);
         new Thread(() -> {
             String error = null;
-            try { runtime.recoverPendingReleaseBeforeLaunch(); }
-            catch (RuntimeException failure) {
+            boolean fallback = false;
+            boolean blocked = false;
+            try {
+                runtime.recoverPendingReleaseBeforeLaunch();
+                org.json.JSONObject gpu = runtime.legacyRedMagicGpuOverrideStatus();
+                fallback = gpu.optBoolean("fallbackToOriginal", false);
+                blocked = !gpu.optBoolean("ready", false);
+            }
+            catch (Exception failure) {
                 error = failure.getMessage() != null ? failure.getMessage() : failure.getClass().getSimpleName();
             }
             final String result = error;
+            final boolean gpuFallbackResult = fallback;
+            final boolean gpuBlockedResult = blocked;
             activity.runOnUiThread(() -> {
-                if (!isAdded() || getView() == null) return;
                 recovering = false;
+                if (!isAdded() || getView() == null) return;
                 if (result != null) {
                     recoveryFailed = true;
                     android.util.Log.e("WoWBox", "Runtime recovery failed: " + result);
@@ -116,6 +146,8 @@ public class BoxLauncherFragment extends Fragment {
                     return;
                 }
                 recoveryFailed = false;
+                gpuFallback = gpuFallbackResult;
+                gpuBlocked = gpuBlockedResult;
                 runtimeUpdateButton.setText(R.string.box_update_action);
                 loadExecutables();
             });
@@ -125,10 +157,13 @@ public class BoxLauncherFragment extends Fragment {
     private void loadExecutables() {
         boolean updateRequired = new BoxInstaller(requireContext()).needsBundledReleaseUpgrade();
         runtimeUpdateButton.setVisibility(updateRequired ? View.VISIBLE : View.GONE);
-        runtimeUpdateStatus.setVisibility(updateRequired ? View.VISIBLE : View.GONE);
+        runtimeUpdateStatus.setVisibility(updateRequired || gpuFallback || gpuBlocked ? View.VISIBLE : View.GONE);
         if (updateRequired && !upgrading) runtimeUpdateStatus.setText(R.string.box_update_required);
+        else if (com.winlator.box.GpuFallbackNoticePolicy.showBlocked(gpuBlocked, updateRequired, upgrading)) runtimeUpdateStatus.setText(R.string.box_gpu_verify_failed);
+        else if (com.winlator.box.GpuFallbackNoticePolicy.showFallback(gpuFallback, updateRequired, upgrading)) runtimeUpdateStatus.setText(R.string.box_gpu_original_fallback);
         runtimeUpdateButton.setEnabled(!upgrading);
-        desktopButton.setEnabled(!updateRequired && !upgrading);
+        desktopButton.setEnabled(!updateRequired && !upgrading && !gpuBlocked);
+        downloadBattleNetButton.setEnabled(!launchController.isPending());
         boolean battleNetInstalled = runtime.launchTargetExistsById(BATTLENET_TARGET_ID);
         File installer = new File(BoxPaths.getPayloadDir(runtime.getSpec()), BATTLENET_INSTALLER_NAME);
         boolean installerReady = installer.isFile();
@@ -164,25 +199,73 @@ public class BoxLauncherFragment extends Fragment {
     }
 
     private void launchOrShowError(String targetId, String hostPath) {
-        try {
-            if (recovering || recoveryFailed || upgrading || new BoxInstaller(requireContext()).needsBundledReleaseUpgrade()) {
-                Toast.makeText(requireContext(), R.string.box_update_required, Toast.LENGTH_LONG).show();
-                return;
-            }
-            if (targetId != null) runtime.launchTarget(targetId, null);
-            else if (hostPath != null) runtime.launchExecutable(hostPath);
-            else runtime.launchDesktop();
+        if (launchController.isPending()) return;
+        if (recovering || recoveryFailed || upgrading) {
+            Toast.makeText(requireContext(), R.string.box_update_required, Toast.LENGTH_LONG).show();
+            return;
         }
-        catch (RuntimeException e) {
-            int message;
-            if ("wow_input_bridge_migration_required".equals(e.getMessage())) {
-                message = R.string.box_input_bridge_migration_required;
-            }
-            else {
-                message = R.string.box_launch_failed;
-            }
-            Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show();
+        if (gpuBlocked) {
+            Toast.makeText(requireContext(), R.string.box_gpu_verify_failed, Toast.LENGTH_LONG).show();
+            return;
         }
+        final androidx.fragment.app.FragmentActivity activity = getActivity();
+        if (activity == null || !isResumed()) return;
+        final android.content.Context appContext = activity.getApplicationContext();
+        final BoxLaunchRequest request = launchController.begin();
+        if (request == null) return;
+        showLaunchChecking();
+        new Thread(() -> {
+            RuntimeException error = null;
+            try {
+                if (new BoxInstaller(appContext).needsBundledReleaseUpgrade()) {
+                    throw new IllegalStateException("release_upgrade_required");
+                }
+                if (targetId != null) runtime.launchTarget(targetId, null, request);
+                else if (hostPath != null) runtime.launchExecutable(hostPath, BoxDebugConfig.none(), request);
+                else runtime.launchDesktop(BoxDebugConfig.none(), request);
+            } catch (RuntimeException failure) {
+                error = failure;
+            }
+            final RuntimeException failure = error;
+            activity.runOnUiThread(() -> {
+                if (failure == null) {
+                    if (!isAdded() || getView() == null || !isResumed()) {
+                        launchController.finish(request);
+                        return;
+                    }
+                    // Keep taps disabled until the target Activity actually
+                    // pauses this Fragment. Recover if Android rejects the
+                    // background Activity request without throwing.
+                    new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                        if (!launchController.finish(request)) return;
+                        if (!isAdded() || getView() == null || !isResumed()) return;
+                        Toast.makeText(activity, R.string.box_launch_failed, Toast.LENGTH_LONG).show();
+                        refreshRuntimeState();
+                    }, 5000);
+                    return;
+                }
+                if (!launchController.finish(request)) return;
+                if (!isAdded() || getView() == null || !isResumed()) return;
+                downloadBattleNetButton.setEnabled(true);
+                if (!(failure instanceof java.util.concurrent.CancellationException)) {
+                    int message = "wow_input_bridge_migration_required".equals(failure.getMessage())
+                            ? R.string.box_input_bridge_migration_required
+                            : "release_upgrade_required".equals(failure.getMessage())
+                                    ? R.string.box_update_required : R.string.box_launch_failed;
+                    Toast.makeText(activity, message, Toast.LENGTH_LONG).show();
+                }
+                refreshRuntimeState();
+            });
+        }, "wowbox-verified-launch").start();
+    }
+
+    private void showLaunchChecking() {
+        runtimeUpdateStatus.setVisibility(View.VISIBLE);
+        runtimeUpdateStatus.setText(R.string.box_launch_preparing);
+        runtimeUpdateButton.setEnabled(false);
+        desktopButton.setEnabled(false);
+        downloadBattleNetButton.setEnabled(false);
+        if (recyclerView.getAdapter() != null) recyclerView.getAdapter().notifyDataSetChanged();
     }
 
     private void updateRuntime() {
@@ -204,8 +287,8 @@ public class BoxLauncherFragment extends Fragment {
             }
             final String result = error;
             activity.runOnUiThread(() -> {
-                if (!isAdded() || getView() == null) return;
                 upgrading = false;
+                if (!isAdded() || getView() == null) return;
                 loadExecutables();
                 if (result == null) {
                     Toast.makeText(activity, R.string.box_update_complete, Toast.LENGTH_LONG).show();
@@ -271,6 +354,7 @@ public class BoxLauncherFragment extends Fragment {
             LaunchItem item = data.get(position);
             holder.title.setText(item.title);
             holder.subtitle.setText(item.subtitle);
+            holder.itemView.setEnabled(!launchController.isPending());
             holder.itemView.setOnClickListener((v) -> launchOrShowError(item.targetId, item.hostPath));
         }
 

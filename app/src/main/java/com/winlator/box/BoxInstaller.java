@@ -1431,6 +1431,10 @@ public class BoxInstaller {
                 state.put("installed", true);
                 state.put("installFinishedAt", System.currentTimeMillis());
                 runtime.saveState(state);
+                // A 0.2 initial install resumed under 0.3 may still use the
+                // legacy GPU. Prepare its independent effective override now;
+                // the original spec/state layer identity is not rewritten.
+                runtime.prepareLegacyRedMagicGpuOverride();
                 try {
                     BoxInitialInstallGuard.complete(new File(BoxPaths.getBoxDir(context), "initial-install-owner"));
                 } catch (IOException cleanupError) {

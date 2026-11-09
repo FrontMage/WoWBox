@@ -111,7 +111,10 @@
     <string name="box_available_launchers">Available launchers</string>
     <string name="box_input_bridge_migration_required">WoW input support must be repaired before launch.</string>
     <string name="box_launch_failed">Unable to start WoW Box.</string>
+    <string name="box_launch_preparing">Checking runtime before launch…</string>
     <string name="box_update_required">Update the WoW Box runtime before launching. Your game data will be preserved.</string>
+    <string name="box_gpu_original_fallback">The new graphics driver is unavailable. Your existing driver remains active and your data is unchanged.</string>
+    <string name="box_gpu_verify_failed">Graphics drivers could not be verified. Your data is unchanged. Restart WoW Box to retry.</string>
     <string name="box_update_action">Update runtime</string>
     <string name="box_update_running">Updating the runtime…</string>
     <string name="box_update_checking">Checking the runtime…</string>

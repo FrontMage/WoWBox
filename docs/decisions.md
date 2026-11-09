@@ -1,5 +1,17 @@
 # Decisions
 
+- Publish the requested 0.3.0 under the existing standard package identity,
+  preserving existing application and game data. Limit device-specific V39,
+  Vulkan host composition and the Battle.net CEF mitigation to the observed
+  RedMagic NX809J / SM8850 lane; disclose unverified paths and open failures.
+  Source: user-confirmed (2026-11-09: release 0.3.0 as a standard-package upgrade with RedMagic adaptation and preserve user data).
+
+- Provide the two graphics cache settings as low-priority defaults while
+  respecting explicitly configured values and without rewriting persisted
+  user specs.
+  Source: user-confirmed (2026-11-09: implement the WoW Box graphics plan).
+  Source: code-evidence (app/src/main/java/com/winlator/box/BoxGraphicsCacheDefaults.java:5-16).
+
 - Publish the v0.2 preview on the user's request with the incomplete device
   verification and inherited-runtime source provenance openly disclosed.
   Source: user-confirmed (2026-10-29: 直接公开吧).
